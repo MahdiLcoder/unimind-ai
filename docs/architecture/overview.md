@@ -32,6 +32,34 @@ It uses the API's async SQLAlchemy models and pgvector persistence. See
 [RAG architecture](rag.md) for module interfaces, migration, access boundaries,
 and optional inference setup.
 
-No multi-agent orchestration is included yet. HTTP upload and query endpoints
-remain deferred until a trusted identity provider can supply the owner and
-course memberships used by the RAG permission filters.
+The agent layer now includes a supervisor graph, Knowledge and Learning agents,
+plus Research, Coding, Planning, and University Services specialists. Task
+routing selects a single agent or a dependency-aware batch; the graph supports
+parallel fan-out, retry on insufficient evidence, and event recording for each
+agent execution. The conversation and checkpoint state persist user session
+history, while the optional learning-memory store keeps user preferences and
+progress isolated by user ID.
+
+```mermaid
+flowchart TD
+    User[Student or faculty] --> Supervisor[Supervisor agent]
+    Supervisor --> Research[Research agent]
+    Supervisor --> Knowledge[Knowledge agent]
+    Supervisor --> Coding[Coding agent]
+    Supervisor --> Planning[Planning agent]
+    Supervisor --> Services[University Services agent]
+    Supervisor --> Learning[Learning agent]
+    Research --> Coding
+    Research --> Learning
+    Knowledge --> Final[Grounded answer]
+    Coding --> Final
+    Planning --> Final
+    Services --> Final
+    Learning --> Final
+```
+
+HTTP upload and query endpoints remain deferred until a trusted identity
+provider can supply the owner and course memberships used by the RAG permission
+filters. The University Services agent only answers questions from configured
+verified official sources and fails closed when no trustworthy source is
+available.

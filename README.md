@@ -2,8 +2,9 @@
 
 UniMind AI is a university assistant project. It provides a Next.js 16 frontend,
 a FastAPI service, PostgreSQL with pgvector, Redis, and a reusable multilingual
-RAG library. Multi-agent orchestration is intentionally out of scope for this
-phase.
+RAG library. Phase 4 adds a collaborative multi-agent orchestration layer with
+seven specialized agents, bounded retries, dependency-aware routing, and
+persistent user memory for learning preferences and progress.
 
 ## Architecture
 
