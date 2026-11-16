@@ -4,8 +4,34 @@ import { UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
+import { toast } from "sonner";
+import {
+  FileText,
+  Upload,
+  Trash2,
+  Search,
+  Send,
+  Sparkles,
+  Bot,
+  User,
+  RefreshCw,
+  FileCheck,
+  AlertCircle,
+} from "lucide-react";
 
 import { apiFetch, apiRequest } from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const documentSchema = z.object({
   id: z.string().uuid(),
@@ -43,7 +69,7 @@ type Message = {
 
 async function consumeAgentStream(
   response: Response,
-  onEvent: (agentEvent: AgentEvent) => void,
+  onEvent: (agentEvent: AgentEvent) => void
 ): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("The agent stream returned no response body");
@@ -124,11 +150,7 @@ export default function WorkspaceContent() {
   const fetchDocuments = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No active session token was returned");
-    return apiRequest(
-      "/api/v1/documents",
-      z.array(documentSchema),
-      { accessToken: token },
-    );
+    return apiRequest("/api/v1/documents", z.array(documentSchema), { accessToken: token });
   }, [getToken]);
 
   useEffect(() => {
@@ -141,7 +163,9 @@ export default function WorkspaceContent() {
       })
       .catch((cause: unknown) => {
         if (active) {
-          setError(cause instanceof Error ? cause.message : "Could not load documents");
+          const err = cause instanceof Error ? cause.message : "Could not load documents";
+          setError(err);
+          toast.error(err);
         }
       })
       .finally(() => {
@@ -167,8 +191,11 @@ export default function WorkspaceContent() {
       });
       setLoadingDocuments(true);
       setRefresh((count) => count + 1);
+      toast.success(`Uploaded and indexed ${file.name}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Document upload failed");
+      const err = cause instanceof Error ? cause.message : "Document upload failed";
+      setError(err);
+      toast.error(err);
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -180,16 +207,19 @@ export default function WorkspaceContent() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No active session token was returned");
-      const response = await apiFetch(
-        `/api/v1/documents/${document.id}`,
-        { accessToken: token, method: "DELETE" },
-      );
+      const response = await apiFetch(`/api/v1/documents/${document.id}`, {
+        accessToken: token,
+        method: "DELETE",
+      });
       if (!response.ok) {
         throw new Error(`Document deletion failed: ${response.status}`);
       }
       setDocuments((current) => current.filter((item) => item.id !== document.id));
+      toast.success(`Deleted ${document.source_filename}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Document deletion failed");
+      const err = cause instanceof Error ? cause.message : "Document deletion failed";
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -208,18 +238,21 @@ export default function WorkspaceContent() {
             source_filename: z.string(),
             page_number: z.number().nullable(),
             content: z.string(),
-          }),
+          })
         ),
         {
           accessToken: token,
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: searchText, top_k: 5 }),
-        },
+        }
       );
       setSearchResults(result);
+      toast.info(`Found ${result.length} relevant sections`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Document search failed");
+      const err = cause instanceof Error ? cause.message : "Document search failed";
+      setError(err);
+      toast.error(err);
     } finally {
       setSearching(false);
     }
@@ -241,13 +274,13 @@ export default function WorkspaceContent() {
       if (!token) throw new Error("No active session token was returned");
       conversationId.current ??= crypto.randomUUID();
       const response = await apiFetch("/api/v1/agents/stream", {
-          accessToken: token,
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversation_id: conversationId.current,
-            message: trimmed,
-          }),
+        accessToken: token,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversationId.current,
+          message: trimmed,
+        }),
       });
       if (!response.ok) {
         const body: unknown = await response.json().catch(() => null);
@@ -275,7 +308,9 @@ export default function WorkspaceContent() {
         }
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The AI request failed");
+      const err = cause instanceof Error ? cause.message : "The AI request failed";
+      setError(err);
+      toast.error(err);
     } finally {
       setSending(false);
     }
@@ -288,228 +323,313 @@ export default function WorkspaceContent() {
 
   function getSources(agentEvent: AgentEvent): Source[] {
     const result = z.array(z.record(z.string(), z.unknown())).safeParse(
-      agentEvent.metadata.sources,
+      agentEvent.metadata.sources
     );
     return result.success ? result.data : [];
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
-      <header className="mb-8 flex items-center justify-between border-b pb-5">
-        <div>
-          <Link className="text-sm font-semibold text-primary" href="/dashboard">
-            UniMind AI
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">AI workspace</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Private knowledge and multi-agent chat
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-muted-foreground sm:inline">
-            {user?.fullName ?? user?.primaryEmailAddress?.emailAddress}
-          </span>
-          <UserButton />
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader />
 
-      {error && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-          <p className="text-sm text-destructive" role="alert">{error}</p>
-          {lastPrompt && !sending && (
-            <button
-              className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-              onClick={() => void sendQuestion(lastPrompt, true)}
-              type="button"
-            >
-              Retry question
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
-        <section className="flex min-h-[36rem] flex-col rounded-2xl border bg-card">
-          <div className="border-b px-5 py-4">
-            <h2 className="font-semibold">Ask your university assistant</h2>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        {/* Workspace Title Header */}
+        <header className="mb-8 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
+              UniMind AI
+            </Link>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              AI workspace
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Answers use your private documents and include available citations.
+              Private knowledge and multi-agent chat
             </p>
           </div>
-          <div className="flex-1 space-y-4 overflow-y-auto p-5" aria-live="polite">
-            {messages.length === 0 && (
-              <p className="rounded-xl bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
-                Upload a PDF or another supported document, then ask a question
-                about its contents.
-              </p>
-            )}
-            {messages.map((message, index) => (
-              <article
-                className={`rounded-xl p-4 ${
-                  message.role === "user" ? "ml-8 bg-primary/10" : "mr-4 bg-muted/60"
-                }`}
-                key={`${message.role}-${index}`}
+          <div className="flex items-center gap-3">
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              {user?.fullName ?? user?.primaryEmailAddress?.emailAddress}
+            </span>
+            <UserButton />
+          </div>
+        </header>
+
+        {error && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="size-4 text-destructive shrink-0" />
+              <p className="text-destructive font-medium">{error}</p>
+            </div>
+            {lastPrompt && !sending && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => void sendQuestion(lastPrompt, true)}
+                type="button"
               >
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {message.role === "user" ? "You" : "UniMind"}
-                </p>
-                <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
-                {!!message.sources?.length && (
-                  <div className="mt-4 border-t pt-3">
-                    <p className="mb-2 text-xs font-semibold text-muted-foreground">
-                      Sources
-                    </p>
-                    <ul className="space-y-1">
-                      {message.sources.map((source, sourceIndex) => (
-                        <li className="text-xs text-muted-foreground" key={sourceIndex}>
-                          {sourceLabel(source)}
-                        </li>
-                      ))}
-                    </ul>
+                <RefreshCw className="size-3.5" />
+                Retry question
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+          {/* Chat Assistant Section */}
+          <Card className="flex min-h-[38rem] flex-col shadow-xs">
+            <CardHeader className="border-b px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <Sparkles className="size-4 text-primary" />
+                    Ask your university assistant
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-xs text-muted-foreground">
+                    Answers use your private documents and include available citations.
+                  </CardDescription>
+                </div>
+                {sending && (
+                  <Badge variant="secondary" className="animate-pulse text-[10px]">
+                    Multi-Agent Active
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="flex-1 space-y-4 overflow-y-auto p-5" aria-live="polite">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full min-h-[16rem] text-center p-6">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                    <Bot className="size-5" />
+                  </div>
+                  <h3 className="mt-3 text-sm font-semibold">Grounded AI Conversations</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    Upload a PDF or another supported document, then ask a question about its contents.
+                  </p>
+                </div>
+              )}
+
+              {messages.map((message, index) => (
+                <article
+                  className={`flex flex-col rounded-xl p-4 transition-colors ${
+                    message.role === "user"
+                      ? "ml-8 bg-primary/10 border border-primary/20"
+                      : "mr-4 bg-muted/40 border border-border/60"
+                  }`}
+                  key={`${message.role}-${index}`}
+                >
+                  <div className="flex items-center gap-1.5 mb-2">
+                    {message.role === "user" ? (
+                      <User className="size-3.5 text-primary" />
+                    ) : (
+                      <Bot className="size-3.5 text-primary" />
+                    )}
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {message.role === "user" ? "You" : "UniMind"}
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                    {message.content}
+                  </p>
+                  {!!message.sources?.length && (
+                    <div className="mt-4 border-t pt-3">
+                      <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                        <FileCheck className="size-3 text-primary" />
+                        Sources
+                      </p>
+                      <ul className="space-y-1">
+                        {message.sources.map((source, sourceIndex) => (
+                          <li
+                            className="text-xs text-muted-foreground bg-background/60 rounded px-2 py-1 border border-border/40"
+                            key={sourceIndex}
+                          >
+                            {sourceLabel(source)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </article>
+              ))}
+
+              {sending && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-xs text-muted-foreground" role="status">
+                  <RefreshCw className="size-3.5 animate-spin text-primary" />
+                  <span>UniMind agents are working…</span>
+                </div>
+              )}
+
+              {agentEvents.filter((agentEvent) => agentEvent.event_type !== "response_ready").length > 0 && (
+                <ol aria-label="Agent execution timeline" className="space-y-2 border-l border-primary/30 pl-4 my-2">
+                  {agentEvents
+                    .filter((agentEvent) => agentEvent.event_type !== "response_ready")
+                    .map((agentEvent, index) => (
+                      <li className="text-xs text-muted-foreground" key={`${agentEvent.request_id}-${index}`}>
+                        <span className="font-medium text-foreground">
+                          {agentEvent.agent ?? agentEvent.event_type.replaceAll("_", " ")}
+                        </span>
+                        {" · "}
+                        {agentEvent.message}
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </CardContent>
+
+            <form className="border-t p-4" onSubmit={submitQuestion}>
+              <label className="sr-only" htmlFor="question">
+                Ask a question
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  className="min-w-0 flex-1 text-sm focus-visible:ring-2 focus-visible:ring-ring"
+                  disabled={sending}
+                  id="question"
+                  maxLength={4096}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  placeholder="Ask a question about your materials…"
+                  value={prompt}
+                />
+                <Button
+                  disabled={sending || !prompt.trim()}
+                  type="submit"
+                  size="default"
+                  className="gap-1.5 shrink-0"
+                >
+                  <Send className="size-3.5" />
+                  Send
+                </Button>
+              </div>
+            </form>
+          </Card>
+
+          {/* Right Sidebar: Documents & Search */}
+          <aside className="space-y-6">
+            {/* Document Library */}
+            <Card id="documents" className="p-5 shadow-xs">
+              <CardTitle className="text-base font-semibold">Your document library</CardTitle>
+              <CardDescription className="mt-1 text-xs text-muted-foreground">
+                Files are private to your account and indexed before upload completes.
+              </CardDescription>
+
+              <input
+                accept=".pdf,.docx,.pptx,.txt,.md"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) void uploadSelectedFile(file);
+                }}
+                ref={fileInput}
+                type="file"
+              />
+
+              <Button
+                variant="outline"
+                className="mt-4 w-full gap-2 text-sm font-medium"
+                disabled={uploading}
+                onClick={() => fileInput.current?.click()}
+                type="button"
+              >
+                <Upload className="size-4" />
+                {uploading ? "Processing document…" : "Upload a document"}
+              </Button>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                PDF, DOCX, PPTX, TXT, or Markdown · up to 20 MB
+              </p>
+
+              <div className="mt-5 space-y-2">
+                {loadingDocuments && (
+                  <div className="space-y-2" role="status">
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <span className="sr-only">Loading documents…</span>
                   </div>
                 )}
-              </article>
-            ))}
-            {sending && (
-              <p className="text-sm text-muted-foreground" role="status">
-                UniMind agents are working…
-              </p>
-            )}
-            {agentEvents.filter((agentEvent) => agentEvent.event_type !== "response_ready").length > 0 && (
-              <ol aria-label="Agent execution timeline" className="space-y-2 border-l pl-4">
-                {agentEvents
-                  .filter((agentEvent) => agentEvent.event_type !== "response_ready")
-                  .map((agentEvent, index) => (
-                    <li className="text-xs text-muted-foreground" key={`${agentEvent.request_id}-${index}`}>
-                      <span className="font-medium">
-                        {agentEvent.agent ?? agentEvent.event_type.replaceAll("_", " ")}
-                      </span>
-                      {" · "}
-                      {agentEvent.message}
+                {!loadingDocuments && documents.length === 0 && (
+                  <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                    No documents uploaded yet.
+                  </p>
+                )}
+                {documents.map((document) => (
+                  <div
+                    className="flex items-start justify-between gap-3 rounded-lg border bg-card/60 p-3 transition-colors hover:bg-muted/40"
+                    key={document.id}
+                  >
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <FileText className="size-4 text-primary shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {document.title ?? document.source_filename}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          Indexed · {new Date(document.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      aria-label={`Delete ${document.source_filename}`}
+                      variant="ghost"
+                      size="xs"
+                      className="shrink-0 text-destructive hover:bg-destructive/10"
+                      onClick={() => void deleteDocument(document)}
+                      type="button"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Semantic Search in Sources */}
+            <Card className="p-5 shadow-xs">
+              <CardTitle className="text-base font-semibold">Search your sources</CardTitle>
+              <form className="mt-3 space-y-2" onSubmit={(event) => void searchLibrary(event)}>
+                <label className="sr-only" htmlFor="document-search">
+                  Search documents
+                </label>
+                <Input
+                  className="w-full text-sm focus-visible:ring-2 focus-visible:ring-ring"
+                  id="document-search"
+                  maxLength={4096}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  placeholder="Search indexed material…"
+                  value={searchText}
+                />
+                <Button
+                  variant="secondary"
+                  className="w-full gap-2 text-sm font-medium"
+                  disabled={searching || !searchText.trim()}
+                  type="submit"
+                >
+                  <Search className="size-3.5" />
+                  {searching ? "Searching…" : "Search"}
+                </Button>
+              </form>
+
+              {searchResults.length > 0 && (
+                <ul className="mt-4 space-y-3">
+                  {searchResults.map((result) => (
+                    <li className="border-t pt-3" key={result.id}>
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <FileText className="size-3 text-primary" />
+                        {result.source_filename}
+                        {result.page_number ? ` · page ${result.page_number}` : ""}
+                      </p>
+                      <p className="mt-1 line-clamp-4 text-xs leading-relaxed text-foreground bg-muted/30 p-2 rounded">
+                        {result.content}
+                      </p>
                     </li>
                   ))}
-              </ol>
-            )}
-          </div>
-          <form className="border-t p-4" onSubmit={submitQuestion}>
-            <label className="sr-only" htmlFor="question">Ask a question</label>
-            <div className="flex gap-2">
-              <input
-                className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                disabled={sending}
-                id="question"
-                maxLength={4096}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Ask a question about your materials…"
-                value={prompt}
-              />
-              <button
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                disabled={sending || !prompt.trim()}
-                type="submit"
-              >
-                Send
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <aside className="space-y-6">
-          <section className="rounded-2xl border bg-card p-5" id="documents">
-            <h2 className="font-semibold">Your document library</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Files are private to your account and indexed before upload completes.
-            </p>
-            <input
-              accept=".pdf,.docx,.pptx,.txt,.md"
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (file) void uploadSelectedFile(file);
-              }}
-              ref={fileInput}
-              type="file"
-            />
-            <button
-              className="mt-4 w-full rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-              disabled={uploading}
-              onClick={() => fileInput.current?.click()}
-              type="button"
-            >
-              {uploading ? "Processing document…" : "Upload a document"}
-            </button>
-            <p className="mt-2 text-xs text-muted-foreground">
-              PDF, DOCX, PPTX, TXT, or Markdown · up to 20 MB
-            </p>
-
-            <div className="mt-5 space-y-2">
-              {loadingDocuments && (
-                <p className="text-sm text-muted-foreground" role="status">
-                  Loading documents…
-                </p>
+                </ul>
               )}
-              {!loadingDocuments && documents.length === 0 && (
-                <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                  No documents uploaded yet.
-                </p>
-              )}
-              {documents.map((document) => (
-                <div className="flex items-start justify-between gap-3 rounded-lg border p-3" key={document.id}>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{document.title ?? document.source_filename}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Indexed · {new Date(document.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <button
-                    aria-label={`Delete ${document.source_filename}`}
-                    className="shrink-0 rounded px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-                    onClick={() => void deleteDocument(document)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border bg-card p-5">
-            <h2 className="font-semibold">Search your sources</h2>
-            <form className="mt-3 space-y-2" onSubmit={(event) => void searchLibrary(event)}>
-              <label className="sr-only" htmlFor="document-search">Search documents</label>
-              <input
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                id="document-search"
-                maxLength={4096}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Search indexed material…"
-                value={searchText}
-              />
-              <button
-                className="w-full rounded-lg bg-secondary px-3 py-2 text-sm font-medium disabled:opacity-50"
-                disabled={searching || !searchText.trim()}
-                type="submit"
-              >
-                {searching ? "Searching…" : "Search"}
-              </button>
-            </form>
-            {searchResults.length > 0 && (
-              <ul className="mt-4 space-y-3">
-                {searchResults.map((result) => (
-                  <li className="border-t pt-3" key={result.id}>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {result.source_filename}
-                      {result.page_number ? ` · page ${result.page_number}` : ""}
-                    </p>
-                    <p className="mt-1 line-clamp-4 text-sm leading-5">{result.content}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </aside>
-      </div>
-    </main>
+            </Card>
+          </aside>
+        </div>
+      </main>
+    </div>
   );
 }
