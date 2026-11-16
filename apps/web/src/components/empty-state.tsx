@@ -1,4 +1,7 @@
+"use client";
+
 import { LucideIcon } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
 interface EmptyStateProps {
@@ -20,21 +23,24 @@ export function EmptyState({
   className = "",
 }: EmptyStateProps) {
   return (
-    <div
-      className={`flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center animate-in fade-in-50 ${className}`}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className={`flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/15 px-6 py-12 text-center backdrop-blur-xs ${className}`}
     >
-      <div className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground shadow-xs">
-        <Icon className="size-6 text-foreground/70" aria-hidden="true" />
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
+        <Icon className="size-7" aria-hidden="true" />
       </div>
-      <h3 className="mt-4 text-base font-semibold tracking-tight text-foreground">{title}</h3>
-      <p className="mt-1.5 max-w-sm text-sm text-muted-foreground leading-relaxed">{description}</p>
+      <h3 className="mt-5 text-base font-semibold tracking-tight text-foreground">{title}</h3>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">{description}</p>
       {actionLabel && onAction && (
-        <div className="mt-5">
-          <Button size="sm" onClick={onAction}>
+        <div className="mt-6">
+          <Button size="sm" onClick={onAction} className="shadow-sm shadow-primary/20">
             {actionLabel}
           </Button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

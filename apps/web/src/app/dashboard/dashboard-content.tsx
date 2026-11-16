@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
+import { motion, type Variants } from "framer-motion";
 import {
   FolderKanban,
   BookOpen,
@@ -103,6 +104,19 @@ const roleLabels: Record<UserProfile["role"], string> = {
   administrator: "Administrator",
 };
 
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.05, duration: 0.45, ease: "easeOut" },
+  }),
+};
+
+const stagger: Variants = {
+  visible: { transition: { staggerChildren: 0.05 } },
+};
+
 export default function DashboardPage() {
   const { getToken, isLoaded: authLoaded } = useAuth();
   const { user, isLoaded: userLoaded } = useUser();
@@ -178,7 +192,12 @@ export default function DashboardPage() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 sm:px-10">
         {/* Header Breadcrumbs / Title */}
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
+        <motion.header
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
@@ -187,19 +206,19 @@ export default function DashboardPage() {
               <span className="text-muted-foreground">/</span>
               <span className="text-xs font-medium text-muted-foreground">Overview</span>
             </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">
               Dashboard
             </h1>
           </div>
           <div className="flex items-center gap-3">
             {profile && (
-              <Badge variant="secondary" className="px-2.5 py-1 text-xs">
+              <Badge variant="secondary" className="px-2.5 py-1 text-xs bg-primary/10 text-primary border-primary/20 font-medium">
                 {roleLabels[profile.role]}
               </Badge>
             )}
             <UserButton />
           </div>
-        </header>
+        </motion.header>
 
         {/* Profile Card Section */}
         <section aria-labelledby="profile-heading" className="mt-8">
@@ -590,7 +609,7 @@ export default function DashboardPage() {
 
         {/* Quick Hub Navigation Cards */}
         <section aria-labelledby="hub-heading" className="mt-10">
-          <div className="border-t pt-8">
+          <div className="border-t border-border/60 pt-8">
             <h2 id="hub-heading" className="text-lg font-semibold tracking-tight text-foreground">
               Academic workspaces & studios
             </h2>
@@ -598,7 +617,13 @@ export default function DashboardPage() {
               Select a specialized environment to start learning, researching, or coding.
             </p>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <motion.div
+              className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-60px" }}
+              variants={stagger}
+            >
               {[
                 {
                   href: "/workspace",
@@ -636,50 +661,57 @@ export default function DashboardPage() {
                   description: "Get programming tutoring, code review, debugging, and challenge feedback.",
                   icon: Code2,
                 },
-              ].map((hub) => {
+              ].map((hub, i) => {
                 const Icon = hub.icon;
                 return (
-                  <Link
-                    key={hub.title}
-                    href={hub.href}
-                    className="group rounded-xl border bg-card p-5 transition-all duration-150 hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex size-9 items-center justify-center rounded-lg bg-secondary text-secondary-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                        <Icon className="size-4" />
+                  <motion.div key={hub.title} variants={fadeUp} custom={i}>
+                    <Link
+                      href={hub.href}
+                      className="group flex h-full flex-col justify-between rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/20">
+                            <Icon className="size-4" />
+                          </div>
+                          <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-1 group-hover:text-primary" />
+                        </div>
+                        <h3 className="mt-3.5 font-semibold text-foreground group-hover:text-primary transition-colors">
+                          {hub.title}
+                        </h3>
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                          {hub.description}
+                        </p>
                       </div>
-                      <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
-                    </div>
-                    <h2 className="mt-3 font-semibold text-foreground group-hover:text-primary transition-colors">
-                      {hub.title}
-                    </h2>
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                      {hub.description}
-                    </p>
-                  </Link>
+                    </Link>
+                  </motion.div>
                 );
               })}
 
               {profile?.role === "administrator" && (
-                <Link
-                  href="/admin"
-                  className="group rounded-xl border bg-card p-5 transition-all duration-150 hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-secondary text-secondary-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <Shield className="size-4" />
+                <motion.div variants={fadeUp} custom={6}>
+                  <Link
+                    href="/admin"
+                    className="group flex h-full flex-col justify-between rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/20">
+                          <Shield className="size-4" />
+                        </div>
+                        <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-1 group-hover:text-primary" />
+                      </div>
+                      <h3 className="mt-3.5 font-semibold text-foreground group-hover:text-primary transition-colors">
+                        Administration
+                      </h3>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Review accounts and manage platform roles.
+                      </p>
                     </div>
-                    <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
-                  </div>
-                  <h2 className="mt-3 font-semibold text-foreground group-hover:text-primary transition-colors">
-                    Administration
-                  </h2>
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    Review accounts and manage platform roles.
-                  </p>
-                </Link>
+                  </Link>
+                </motion.div>
               )}
-            </div>
+            </motion.div>
           </div>
         </section>
       </main>

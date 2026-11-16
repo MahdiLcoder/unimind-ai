@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
-  GraduationCap,
   LayoutDashboard,
   FolderKanban,
   BookOpen,
@@ -14,6 +14,7 @@ import {
   FileSearch,
   Shield,
   Menu,
+  Eye,
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,12 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <motion.header
+      initial={{ y: -20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60"
+    >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand */}
         <div className="flex items-center gap-6">
@@ -56,26 +62,30 @@ export function SiteHeader() {
             href="/"
             className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
-              <GraduationCap className="size-5" />
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-primary/30">
+              <Eye className="size-5" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                <span className="font-semibold tracking-tight text-foreground">
-                  UniMind AI
+                <span className="font-bold tracking-tight text-foreground">
+                  UniMind
                 </span>
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium tracking-wide">
-                  Academic
+                <Badge
+                  variant="secondary"
+                  className="px-1.5 py-0 text-[10px] font-semibold tracking-wide bg-primary/10 text-primary border-primary/20"
+                >
+                  AI
                 </Badge>
               </div>
             </div>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav aria-label="Primary" className="hidden lg:flex lg:items-center lg:gap-1">
+          <nav aria-label="Primary" className="hidden lg:flex lg:items-center lg:gap-0.5">
             {navItems.map((item) => {
               const currentPath = pathname ?? "";
-              const isActive = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+              const isActive =
+                currentPath === item.href || currentPath.startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
                 <Link
@@ -83,14 +93,30 @@ export function SiteHeader() {
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
-                      ? "bg-secondary text-secondary-foreground shadow-xs"
-                      : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className={cn("size-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                  <Icon
+                    className={cn(
+                      "size-4",
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  />
                   {item.name}
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-indicator"
+                      className="absolute inset-0 rounded-lg bg-primary/8 border border-primary/15"
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 30,
+                      }}
+                    />
+                  )}
                 </Link>
               );
             })}
@@ -103,16 +129,26 @@ export function SiteHeader() {
             <UserButton
               appearance={{
                 elements: {
-                  avatarBox: "size-8 border border-border shadow-xs",
+                  avatarBox:
+                    "size-8 border-2 border-primary/20 shadow-sm ring-2 ring-background",
                 },
               }}
             />
           ) : (
             <div className="hidden sm:flex sm:items-center sm:gap-2">
-              <Link href="/sign-in" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              <Link
+                href="/sign-in"
+                className={buttonVariants({ variant: "ghost", size: "sm" })}
+              >
                 Sign in
               </Link>
-              <Link href="/sign-up" className={buttonVariants({ size: "sm" })}>
+              <Link
+                href="/sign-up"
+                className={buttonVariants({
+                  size: "sm",
+                  className: "shadow-sm shadow-primary/20",
+                })}
+              >
                 Get started
               </Link>
             </div>
@@ -133,33 +169,44 @@ export function SiteHeader() {
             <SheetContent side="right" className="w-72 p-6 sm:w-80">
               <SheetHeader className="text-left">
                 <SheetTitle className="flex items-center gap-2 text-base font-semibold">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <GraduationCap className="size-4" />
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                    <Eye className="size-4" />
                   </div>
-                  UniMind AI Navigation
+                  UniMind AI
                 </SheetTitle>
               </SheetHeader>
-              <nav aria-label="Mobile Navigation" className="mt-6 flex flex-col gap-1.5">
-                {navItems.map((item) => {
+              <nav
+                aria-label="Mobile Navigation"
+                className="mt-6 flex flex-col gap-1"
+              >
+                {navItems.map((item, index) => {
                   const currentPath = pathname ?? "";
-                  const isActive = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+                  const isActive =
+                    currentPath === item.href ||
+                    currentPath.startsWith(`${item.href}/`);
                   const Icon = item.icon;
                   return (
-                    <Link
+                    <motion.div
                       key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      aria-current={isActive ? "page" : undefined}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        isActive
-                          ? "bg-secondary text-secondary-foreground"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      )}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05, duration: 0.3 }}
                     >
-                      <Icon className="size-4" />
-                      {item.name}
-                    </Link>
+                      <Link
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/15"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        {item.name}
+                      </Link>
+                    </motion.div>
                   );
                 })}
               </nav>
@@ -168,14 +215,19 @@ export function SiteHeader() {
                   <Link
                     href="/sign-in"
                     onClick={() => setOpen(false)}
-                    className={buttonVariants({ variant: "outline", className: "w-full justify-center" })}
+                    className={buttonVariants({
+                      variant: "outline",
+                      className: "w-full justify-center",
+                    })}
                   >
                     Sign in
                   </Link>
                   <Link
                     href="/sign-up"
                     onClick={() => setOpen(false)}
-                    className={buttonVariants({ className: "w-full justify-center" })}
+                    className={buttonVariants({
+                      className: "w-full justify-center shadow-sm shadow-primary/20",
+                    })}
                   >
                     Create account
                   </Link>
@@ -185,6 +237,6 @@ export function SiteHeader() {
           </Sheet>
         </div>
       </div>
-    </header>
+    </motion.header>
   );
 }
