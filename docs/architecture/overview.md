@@ -27,5 +27,11 @@ The checked-in `.env.example` contains local-only defaults; actual `.env` files
 are ignored by Git. Add schema changes as Alembic revisions under
 `services/ai-api/migrations/versions`.
 
-The `ai/` subdirectories are structural namespaces only in this phase. No
-agents, model downloads, or inference services are started.
+The reusable RAG pipeline lives in `ai/rag` and model providers in `ai/models`.
+It uses the API's async SQLAlchemy models and pgvector persistence. See
+[RAG architecture](rag.md) for module interfaces, migration, access boundaries,
+and optional inference setup.
+
+No multi-agent orchestration is included yet. HTTP upload and query endpoints
+remain deferred until a trusted identity provider can supply the owner and
+course memberships used by the RAG permission filters.

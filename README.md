@@ -1,15 +1,18 @@
 # UniMind AI
 
-UniMind AI is a university assistant project. This foundation provides a
-Next.js 16 frontend, a FastAPI service, PostgreSQL with pgvector, and Redis.
-AI-agent functionality is intentionally out of scope for this phase.
+UniMind AI is a university assistant project. It provides a Next.js 16 frontend,
+a FastAPI service, PostgreSQL with pgvector, Redis, and a reusable multilingual
+RAG library. Multi-agent orchestration is intentionally out of scope for this
+phase.
 
 ## Architecture
 
 - `apps/web`: Next.js App Router, TypeScript, Tailwind CSS 4, shadcn/ui
 - `services/ai-api`: FastAPI, Pydantic settings, async SQLAlchemy, Alembic
-- `ai/agents`, `ai/graphs`, `ai/rag`, `ai/models`, `ai/tools`, `ai/prompts`,
-  `ai/state`, `ai/evaluation`: reserved for later AI milestones
+- `ai/rag`, `ai/models`, `ai/evaluation`: reusable retrieval, model-provider,
+  and evaluation interfaces
+- `ai/agents`, `ai/graphs`, `ai/tools`, `ai/prompts`, `ai/state`: reserved for
+  later agent milestones
 - `infrastructure`: Docker, Kubernetes, monitoring, and scripts
 - `docs`: architecture and development documentation
 - PostgreSQL 17 with the pgvector extension; Redis with AOF persistence
@@ -23,8 +26,9 @@ boundaries and health checks.
 - Node.js 22+ and pnpm 10+
 - Python 3.11+ and uv
 
-The project has been structured to avoid downloading or starting local AI models
-during foundation setup.
+The default API installation does not download model weights or start inference.
+Hugging Face inference is an optional CPU-only dependency group, and models load
+lazily one at a time. Ollama generation is configured separately.
 
 ## Run the full stack
 
@@ -81,7 +85,7 @@ pnpm install --frozen-lockfile
 pnpm check
 cd services/ai-api
 uv sync --frozen
-uv run ruff check .
+uv run ruff check . ../../ai
 uv run pytest
 ```
 
@@ -93,6 +97,29 @@ extension with:
 docker compose exec postgres sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT extversion FROM pg_extension WHERE extname = '\''vector'\'';"'
 ```
+
+## Optional Hugging Face inference
+
+The default install supports parsing, persistence, retrieval interfaces, and
+Hugging Face Hub metadata inspection without importing PyTorch. To enable local
+embeddings and reranking:
+
+```bash
+cd services/ai-api
+uv sync --frozen --group inference
+```
+
+This installs CPU PyTorch only. BGE-M3 and the reranker download weights on
+first use; no model is downloaded during setup. Configure model IDs and the
+CPU batch size with `HF_EMBEDDING_MODEL`, `HF_EMBEDDING_DIMENSIONS`,
+`HF_RERANKER_MODEL`, `HF_DEVICE`, and `HF_BATCH_SIZE`. Use a reachable Ollama
+instance for generation (`OLLAMA_BASE_URL` and `OLLAMA_MODEL`).
+
+HTTP document endpoints are intentionally not exposed yet: this repository has
+no trusted user/course identity integration. The Python service accepts an
+authenticated `owner_id` and trusted `allowed_course_ids`; do not pass
+user-controlled values for these permission scopes. See
+[RAG architecture and usage](docs/architecture/rag.md).
 
 ## Branch and commit conventions
 
