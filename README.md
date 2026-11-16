@@ -2,7 +2,7 @@
 
 UniMind AI is a university assistant project. It provides a Next.js 16 frontend,
 a FastAPI service, PostgreSQL with pgvector, Redis, and a reusable multilingual
-RAG library. Phase 4 adds a collaborative multi-agent orchestration layer with
+RAG library. The application adds a collaborative multi-agent layer with
 seven specialized agents, bounded retries, dependency-aware routing, and
 persistent user memory for learning preferences and progress.
 
@@ -12,8 +12,8 @@ persistent user memory for learning preferences and progress.
 - `services/ai-api`: FastAPI, Pydantic settings, async SQLAlchemy, Alembic
 - `ai/rag`, `ai/models`, `ai/evaluation`: reusable retrieval, model-provider,
   and evaluation interfaces
-- `ai/agents`, `ai/graphs`, `ai/tools`, `ai/prompts`, `ai/state`: reserved for
-  later agent milestones
+- `ai/agents`, `ai/graphs`, `ai/tools`, `ai/prompts`, `ai/state`: multi-agent
+  workflows, prompts, tools, and state
 - `infrastructure`: Docker, Kubernetes, monitoring, and scripts
 - `docs`: architecture and development documentation
 - PostgreSQL 17 with the pgvector extension; Redis with AOF persistence
@@ -47,12 +47,27 @@ Services:
 - Liveness: <http://localhost:8000/health/live>
 - Dependency readiness: <http://localhost:8000/health/ready>
 
-The API container waits for healthy Postgres and Redis, applies Alembic
+The stack includes PostgreSQL, Redis, FastAPI, an internal code runner, and
+Next.js, plus a private CPU-only Ollama service. On first startup, a one-shot
+service pulls the configured `OLLAMA_MODEL` (default `qwen2.5:3b`) into the
+persistent `ollama_data` volume; the model endpoint is not published to the
+host. The API waits for that pull to finish before starting. Compose builds a
+minimal Python execution image in a one-shot service.
+Agent execution has a configurable `AGENT_EXECUTION_TIMEOUT_SECONDS` limit
+(120 seconds by default to accommodate local CPU inference).
+For PDF embedding and semantic search, set `INSTALL_HF_INFERENCE=true` before
+building the API image. Hugging Face model files are cached in the persistent
+`hf_model_cache` volume. Set `HF_RERANKER_ENABLED=false` to skip the optional
+reranker and its additional model download.
+The API waits for healthy Postgres, Redis, and runner services, applies Alembic
 migrations (including enabling pgvector), then starts FastAPI. The readiness
-endpoint returns HTTP 503 unless both dependencies are reachable. Stop with
+endpoint returns HTTP 503 unless Postgres and Redis are reachable. Stop with
 `docker compose down`; named volumes retain database and Redis data.
 The host ports default to `5432` and `6379`; set `POSTGRES_HOST_PORT` and
-`REDIS_HOST_PORT` in `.env` if those ports are already in use.
+`REDIS_HOST_PORT` in `.env` if those ports are already in use. The frontend
+host port defaults to `3000`; if it is occupied, set `WEB_HOST_PORT` and update
+`FRONTEND_URL`, `CORS_ORIGINS`, and `CLERK_AUTHORIZED_PARTIES` in `.env` to
+include the frontend origin.
 
 ## Run services locally
 
@@ -79,6 +94,37 @@ must point to an address reachable by the browser (the default is
 `http://localhost:8000`). Never commit `.env` or use the example development
 password outside a local machine.
 
+## Clerk authentication and roles
+
+Create a Clerk application and configure these values in the root `.env`:
+
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (or `CLERK_PUBLISHABLE_KEY`, as emitted
+  by the Clerk CLI) and `CLERK_SECRET_KEY` from the Clerk application.
+- `CLERK_ISSUER` and `CLERK_JWKS_URL` from that application's JWT/JWKS
+  configuration.
+- `CLERK_AUTHORIZED_PARTIES` as a comma-separated list of trusted frontend
+  origins (locally, `http://localhost:3000`).
+
+The frontend keys, issuer, and JWKS URL must all belong to the same Clerk
+instance. Clerk development keys are suitable for local testing, but not for
+production deployments.
+
+The Next.js app provides `/sign-in`, `/sign-up`, and protected dashboard,
+workspace, course, learning, research, coding, and administration pages.
+FastAPI validates the bearer token signature, issuer, expiration, and
+authorized party before provisioning or resolving a local `users` record.
+Roles are stored server-side as `student`, `professor`, or `administrator`;
+new users default to `student`. To bootstrap initial administrators, set
+`ADMIN_CLERK_USER_IDS` to a comma-separated list of Clerk user IDs before those
+users first sign in. Administrators can list users and update roles through
+`GET /api/v1/users` and `PATCH /api/v1/users/{clerk_user_id}/role`. The API does
+not accept role claims or course permissions from browser input.
+
+The Clerk provider can display development keyless setup if no frontend key is
+configured. API-authenticated features require the issuer, JWKS URL, and
+authorized-party settings; protected API requests fail closed until these are
+configured. Password recovery and MFA are managed by Clerk.
+
 ## Quality checks
 
 ```bash
@@ -91,7 +137,8 @@ uv run pytest
 ```
 
 For the full Docker health check, use `docker compose up --build -d`, then
-`docker compose ps`; all four services should report healthy. Verify the
+`docker compose ps`; all five long-running services should report healthy
+(the sandbox-image service exits successfully after building its image). Verify the
 extension with:
 
 ```bash
@@ -116,11 +163,55 @@ CPU batch size with `HF_EMBEDDING_MODEL`, `HF_EMBEDDING_DIMENSIONS`,
 `HF_RERANKER_MODEL`, `HF_DEVICE`, and `HF_BATCH_SIZE`. Use a reachable Ollama
 instance for generation (`OLLAMA_BASE_URL` and `OLLAMA_MODEL`).
 
-HTTP document endpoints are intentionally not exposed yet: this repository has
-no trusted user/course identity integration. The Python service accepts an
-authenticated `owner_id` and trusted `allowed_course_ids`; do not pass
-user-controlled values for these permission scopes. See
+Authenticated private-document endpoints are available at
+`POST/GET /api/v1/documents`, `DELETE /api/v1/documents/{document_id}`, and
+`POST /api/v1/documents/search`. The protected `/workspace` page combines
+upload, library management, semantic search, and the existing multi-agent chat
+stream with citations. Documents are scoped to the verified Clerk user.
+Course-specific access is derived from professor ownership, active student
+enrollment, or administrator access; browser-supplied course scopes are never
+trusted. The Python RAG service accepts trusted `owner_id` and
+`allowed_course_ids`. See
 [RAG architecture and usage](docs/architecture/rag.md).
+
+## Academic application modules
+
+The authenticated application includes workspace and course management,
+student enrollment, professor course assignments and quizzes, task tracking,
+AI-generated quizzes and capacity-bounded study plans, Crossref paper search
+and a per-user saved bibliography, and a Coding Agent interface for tutoring,
+generation, review, debugging, and challenge feedback. `CROSSREF_MAILTO` is an
+optional contact address for polite Crossref API usage. Role changes are
+administrator-only; self-demotion and removal of the final administrator are
+rejected.
+
+The Coding Agent can execute Python in a short-lived container with no network,
+read-only root filesystem, a non-root identity, and CPU, memory, process,
+time, and output limits; only the standard library is available. The runner
+needs access to a Docker Engine socket, which is effectively host-root
+authority. Use a dedicated, preferably rootless Docker host for untrusted
+submissions; do not expose the runner or share that daemon with sensitive
+workloads. The dashboard provides task, course, quiz,
+deadline, and agent-run summaries with persistent in-app notifications.
+Professors can review course learning activity; administrators can manage
+workspaces, allowlisted feature flags, and audit records. Notifications are
+in-app only (no push delivery). Quiz generation validates the requested item
+count and requires four non-empty, distinct choices with the answer among
+them; invalid model output returns an upstream error and is not saved.
+
+Local verification has confirmed student sign-in and access to the profile,
+dashboard, and notifications, with student access to administrator endpoints
+denied. This used Clerk development keys. A real Qwen 2.5 3B streaming request
+and a PDF upload, indexing, semantic search, and cited chat answer have also
+been exercised. Live component checks also confirmed Crossref metadata lookup,
+one quiz output with four distinct choices, a generated three-task study plan
+that fit the supplied daily capacity, and a harmless code snippet returning
+`42` through the isolated runner. A separate quiz generation returned invalid
+choices and was rejected by validation. These component checks do not
+establish production Clerk authentication or a complete student, professor,
+and administrator workflow. Professor and administrator end-to-end flows,
+authenticated quiz submission and study-plan save flows, and security of a
+production code runner remain to be verified against the configured stack.
 
 ## Branch and commit conventions
 

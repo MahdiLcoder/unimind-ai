@@ -20,10 +20,12 @@ question ──> embed ──> hybrid vector/keyword search ──> BGE reranker
                                       Ollama or HF text generation
 ```
 
-The code is a Python library for the future Knowledge Agent; it does not add
-unauthenticated HTTP document endpoints. `RAGService` is the high-level
-interface. It accepts a SQLAlchemy `AsyncSession`, an `EmbeddingProvider`, and
-trusted identity/course scope supplied by its caller.
+`RAGService` is the high-level interface. The authenticated API exposes private
+document upload/list/delete and semantic search at `/api/v1/documents`. Upload
+and search use the verified Clerk identity as owner. Course IDs are accepted
+only after the API verifies professor ownership, active student enrollment, or
+administrator access. `/api/v1/agents/stream` connects the Knowledge Agent to
+retrieval and returns source metadata with the final response.
 
 ## Installation and model behavior
 
@@ -92,11 +94,10 @@ retrieved content is treated as untrusted evidence and separated from the
 system prompt. Detection is defense-in-depth, not a guarantee that arbitrary
 prompt injection can be recognized.
 
-The repository enforces document-owner access and course membership only when
-the caller supplies trusted identity and course IDs. This phase intentionally
-does not invent an authentication mechanism. Do not expose `RAGService` through
-an HTTP route until the caller derives these values from verified authentication
-claims and checks the user's course memberships.
+The repository enforces document-owner access and course membership using
+trusted identity and course IDs. API routes derive owner IDs from the verified
+Clerk session and permitted course IDs from database-backed roles and
+enrollments. Browser-provided roles and access scopes are not trusted.
 
 ## Evaluation and verification
 
@@ -127,3 +128,10 @@ or Hugging Face model inference was run. End-to-end multilingual BGE-M3
 retrieval and generated-answer/page-citation verification with a real
 university PDF therefore remains an environment-level check; the test suite
 does not claim that external model smoke test passed.
+
+Authenticated document processing requires the optional CPU inference group
+and a reachable Ollama generation model. Setup does not download model weights;
+the first embedding/reranking call downloads the configured Hugging Face model.
+When inference dependencies or model services are unavailable, upload/search
+return an explicit service-unavailable error rather than accepting an
+unindexed document or returning fabricated results.

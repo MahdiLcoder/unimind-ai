@@ -31,10 +31,39 @@ services:
       timeout: 3s
       retries: 10
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    mem_limit: 8g
+    cpus: 6
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  ollama-model:
+    image: ollama/ollama:latest
+    entrypoint: ["ollama"]
+    command: ["pull", "${OLLAMA_MODEL:-qwen2.5:3b}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    restart: "no"
+    volumes:
+      - ollama_data:/root/.ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+
   ai-api:
     build:
       context: .
       dockerfile: services/ai-api/Dockerfile
+      args:
+        INSTALL_HF_INFERENCE: ${INSTALL_HF_INFERENCE:-false}
     restart: unless-stopped
     environment:
       APP_ENV: ${APP_ENV:-development}
@@ -44,9 +73,32 @@ services:
       POSTGRES_HOST: postgres
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CLERK_JWKS_URL: ${CLERK_JWKS_URL:-}
+      CLERK_ISSUER: ${CLERK_ISSUER:-}
+      CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-http://localhost:3000}
+      ADMIN_CLERK_USER_IDS: ${ADMIN_CLERK_USER_IDS:-}
+      AGENT_EXECUTION_TIMEOUT_SECONDS: ${AGENT_EXECUTION_TIMEOUT_SECONDS:-120}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      HF_RERANKER_ENABLED: ${HF_RERANKER_ENABLED:-true}
+      HF_EMBEDDING_MODEL: ${HF_EMBEDDING_MODEL:-BAAI/bge-m3}
+      HF_EMBEDDING_DIMENSIONS: ${HF_EMBEDDING_DIMENSIONS:-1024}
+      HF_RERANKER_MODEL: ${HF_RERANKER_MODEL:-BAAI/bge-reranker-base}
+      HF_DEVICE: ${HF_DEVICE:-cpu}
+      HF_BATCH_SIZE: ${HF_BATCH_SIZE:-8}
+      CODE_RUNNER_URL: http://code-runner:8081
+    volumes:
+      - hf_model_cache:/root/.cache/huggingface
     ports:
       - "8000:8000"
+    networks:
+      - default
+      - code-runner
     depends_on:
+      code-runner:
+        condition: service_healthy
+      ollama-model:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -62,15 +114,62 @@ services:
       retries: 5
       start_period: 10s
 
+  sandbox-image:
+    build:
+      context: .
+      dockerfile: services/code-runner/Dockerfile
+      target: sandbox
+    image: unimind-python-sandbox:latest
+    command: ["python", "-c", "pass"]
+    network_mode: none
+    restart: "no"
+
+  code-runner:
+    build:
+      context: .
+      dockerfile: services/code-runner/Dockerfile
+      target: runner
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - code-runner
+    depends_on:
+      sandbox-image:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+    environment:
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${WEB_HOST_PORT:-3000}:3000"
     depends_on:
       ai-api:
         condition: service_healthy
@@ -88,3 +187,9 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  ollama_data:
+  hf_model_cache:
+
+networks:
+  code-runner:
+    internal: true
