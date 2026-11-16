@@ -1,11 +1,10 @@
 "use client";
 
-import { UserButton, useAuth, useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { motion, type Variants } from "framer-motion";
 import {
   FolderKanban,
   BookOpen,
@@ -19,12 +18,12 @@ import {
   RefreshCw,
   Calendar,
   CheckCircle,
-  GraduationCap,
   ArrowRight,
   TrendingUp,
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -104,19 +103,6 @@ const roleLabels: Record<UserProfile["role"], string> = {
   administrator: "Administrator",
 };
 
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: (i: number = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.05, duration: 0.45, ease: "easeOut" },
-  }),
-};
-
-const stagger: Variants = {
-  visible: { transition: { staggerChildren: 0.05 } },
-};
-
 export default function DashboardPage() {
   const { getToken, isLoaded: authLoaded } = useAuth();
   const { user, isLoaded: userLoaded } = useUser();
@@ -186,173 +172,128 @@ export default function DashboardPage() {
 
   const isLoading = (!authLoaded || !userLoaded) || (!profile && !error);
 
+  const workspaces = [
+    {
+      title: "AI Workspace",
+      desc: "Chat with course documents & verified citations",
+      href: "/workspace",
+      icon: FolderKanban,
+    },
+    {
+      title: "Courses",
+      desc: "Syllabi, course documents & assignments",
+      href: "/courses",
+      icon: BookOpen,
+    },
+    {
+      title: "Learning Studio",
+      desc: "Adaptive study plans, quizzes & tasks",
+      href: "/learning",
+      icon: Sparkles,
+    },
+    {
+      title: "Research Studio",
+      desc: "Crossref search & APA bibliography",
+      href: "/research",
+      icon: FileSearch,
+    },
+    {
+      title: "Coding Lab",
+      desc: "Sandboxed Python execution & code tutor",
+      href: "/coding",
+      icon: Code2,
+    },
+    ...(profile?.role === "administrator"
+      ? [
+          {
+            title: "Administration",
+            desc: "User roles, access control & audit",
+            href: "/admin",
+            icon: Shield,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 sm:px-10">
-        {/* Header Breadcrumbs / Title */}
-        <motion.header
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                UniMind AI
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span className="text-xs font-medium text-muted-foreground">ISI Kef</span>
-              <span className="text-muted-foreground">/</span>
-              <span className="text-xs font-medium text-muted-foreground">Overview</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">
-              Dashboard
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {profile && (
-              <Badge variant="secondary" className="px-2.5 py-1 text-xs bg-primary/10 text-primary border-primary/20 font-medium">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title={user?.firstName ? `Welcome, ${user.firstName}` : "Academic Dashboard"}
+          description={
+            profile
+              ? `Signed in as ${roleLabels[profile.role]} · ISI Kef Academic Portal`
+              : "Loading your academic context…"
+          }
+          badge={
+            profile ? (
+              <Badge variant="secondary" className="font-medium text-xs">
                 {roleLabels[profile.role]}
               </Badge>
-            )}
-            <UserButton />
+            ) : null
+          }
+        >
+          <Link
+            href="/workspace"
+            className={buttonVariants({ size: "sm" })}
+          >
+            <span>Open AI Workspace</span>
+            <ArrowRight className="size-3.5 ml-1.5" />
+          </Link>
+        </PageHeader>
+
+        {error && (
+          <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert">
+            <p className="font-medium text-destructive">{error}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 gap-1.5"
+              onClick={() => {
+                setError(null);
+                setRetry((count) => count + 1);
+                toast.info("Retrying dashboard reload…");
+              }}
+              type="button"
+            >
+              <RefreshCw className="size-3.5" />
+              Retry
+            </Button>
           </div>
-        </motion.header>
+        )}
 
-        {/* Profile Card Section */}
-        <section aria-labelledby="profile-heading" className="mt-8">
-          <Card className="border-border/80 shadow-xs">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Active Account
-                  </CardDescription>
-                  {isLoading && (
-                    <div className="mt-3 space-y-2" role="status">
-                      <Skeleton className="h-6 w-48" />
-                      <Skeleton className="h-4 w-32" />
-                      <span className="sr-only">Loading your profile…</span>
-                    </div>
-                  )}
-                  {profile && (
-                    <div className="mt-1">
-                      <CardTitle id="profile-heading" className="text-xl font-semibold text-foreground">
-                        {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "Welcome"}
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Signed in as {roleLabels[profile.role]} · {user?.primaryEmailAddress?.emailAddress ?? profile.email ?? ""}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {profile && (
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href="/workspace"
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                    >
-                      Open AI Workspace
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            {error && (
-              <CardContent className="pt-0">
-                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert">
-                  <p className="font-medium text-destructive">{error}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 gap-1.5"
-                    onClick={() => {
-                      setError(null);
-                      setRetry((count) => count + 1);
-                      toast.info("Retrying profile reload…");
-                    }}
-                    type="button"
-                  >
-                    <RefreshCw className="size-3.5" />
-                    Retry
-                  </Button>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        </section>
-
-        {/* Quick Actions Launchpad */}
-        <section aria-labelledby="quick-actions-heading" className="mt-8">
+        {/* Workspaces Navigation */}
+        <section aria-labelledby="workspaces-heading" className="mt-8">
           <div className="flex items-center justify-between mb-3">
-            <h2 id="quick-actions-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Academic Launchpad
+            <h2 id="workspaces-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Academic Workspaces
             </h2>
-            <span className="text-xs text-muted-foreground">Direct shortcuts</span>
+            <span className="text-xs text-muted-foreground">Core modules</span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              {
-                title: "AI Workspace",
-                desc: "Chat with verified citations",
-                href: "/workspace",
-                icon: FolderKanban,
-                color: "text-primary",
-                bg: "bg-primary/10",
-              },
-              {
-                title: "Study Plans",
-                desc: "Adaptive schedules & quizzes",
-                href: "/learning",
-                icon: Sparkles,
-                color: "text-amber-500",
-                bg: "bg-amber-500/10",
-              },
-              {
-                title: "Coding Lab",
-                desc: "Sandboxed execution & tutor",
-                href: "/coding",
-                icon: Code2,
-                color: "text-emerald-500",
-                bg: "bg-emerald-500/10",
-              },
-              {
-                title: "Research Studio",
-                desc: "Crossref search & APA cite",
-                href: "/research",
-                icon: FileSearch,
-                color: "text-rose-500",
-                bg: "bg-rose-500/10",
-              },
-              {
-                title: "Courses",
-                desc: "Syllabi & assignments",
-                href: "/courses",
-                icon: BookOpen,
-                color: "text-blue-500",
-                bg: "bg-blue-500/10",
-              },
-            ].map((action) => {
+          <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-${workspaces.length > 5 ? "3" : "5"}`}>
+            {workspaces.map((action) => {
               const Icon = action.icon;
               return (
                 <Link
                   key={action.title}
                   href={action.href}
-                  className="group relative flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="group relative flex flex-col justify-between rounded-lg border border-border/70 bg-card p-4 transition-all duration-150 hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex items-start justify-between">
-                    <div className={`flex size-9 items-center justify-center rounded-lg ${action.bg} ${action.color} transition-transform group-hover:scale-105`}>
+                    <div className="flex size-8 items-center justify-center rounded-md border border-border/60 bg-muted/40 text-foreground">
                       <Icon className="size-4" />
                     </div>
                     <ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
                   </div>
                   <div className="mt-3">
-                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{action.title}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">{action.desc}</p>
+                    <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                      {action.title}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
+                      {action.desc}
+                    </p>
                   </div>
                 </Link>
               );
@@ -361,16 +302,27 @@ export default function DashboardPage() {
         </section>
 
         {/* University Overview Metrics */}
+        {isLoading && !summary && (
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} className="p-4">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="mt-3 h-7 w-12" />
+              </Card>
+            ))}
+          </div>
+        )}
+
         {summary && (
           <section aria-labelledby="overview-heading" className="mt-8">
-            <div className="flex items-center justify-between">
-              <h2 id="overview-heading" className="text-lg font-semibold tracking-tight text-foreground">
-                Your university overview
+            <div className="flex items-center justify-between mb-3">
+              <h2 id="overview-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Academic Progress & Activity
               </h2>
-              <span className="text-xs text-muted-foreground">Real-time sync</span>
+              <span className="text-xs text-muted-foreground">Current semester</span>
             </div>
 
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {[
                 { label: "Courses", value: summary.course_count, icon: BookOpen },
                 { label: "Open tasks", value: summary.open_task_count, icon: Clock },
@@ -382,22 +334,22 @@ export default function DashboardPage() {
                   icon: TrendingUp,
                 },
               ].map(({ label, value, icon: Icon }) => (
-                <Card key={label} className="p-4 shadow-xs">
+                <Card key={label} className="p-4">
                   <dt className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                     <span>{label}</span>
-                    <Icon className="size-3.5 text-muted-foreground/70" />
+                    <Icon className="size-3.5 text-muted-foreground/60" />
                   </dt>
                   <dd className="mt-2 text-2xl font-bold tracking-tight text-foreground">{value}</dd>
                 </Card>
               ))}
             </dl>
 
-            {/* Structured Tabbed Section for Detailed Items */}
+            {/* Structured Tabbed Section */}
             <Tabs defaultValue="all" className="mt-8">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
-                <TabsList className="h-9">
-                  <TabsTrigger value="all">Combined View</TabsTrigger>
-                  <TabsTrigger value="deadlines" className="gap-1.5">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <TabsList className="h-8">
+                  <TabsTrigger value="all" className="text-xs">Overview</TabsTrigger>
+                  <TabsTrigger value="deadlines" className="gap-1.5 text-xs">
                     Deadlines
                     {summary.upcoming_tasks.length > 0 && (
                       <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
@@ -405,7 +357,7 @@ export default function DashboardPage() {
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="notifications" className="gap-1.5">
+                  <TabsTrigger value="notifications" className="gap-1.5 text-xs">
                     Alerts
                     {notifications && notifications.unread_count > 0 && (
                       <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">
@@ -413,23 +365,20 @@ export default function DashboardPage() {
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="agents">Agent Runs</TabsTrigger>
+                  <TabsTrigger value="agents" className="text-xs">Agent Runs</TabsTrigger>
                 </TabsList>
-                <div className="text-xs text-muted-foreground">
-                  Press <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px]">Tab</kbd> to cycle tabs
-                </div>
               </div>
 
               {/* Combined View */}
               <TabsContent value="all" className="mt-6 space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2">
                   {/* Upcoming Deadlines */}
-                  <Card className="shadow-xs">
+                  <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                          <Calendar className="size-4 text-primary" />
-                          Upcoming deadlines
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                          <Calendar className="size-4 text-muted-foreground" />
+                          Upcoming Deadlines
                         </CardTitle>
                         <Link
                           href="/learning"
@@ -440,10 +389,10 @@ export default function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ul className="space-y-2.5">
+                      <ul className="space-y-2">
                         {summary.upcoming_tasks.map((task) => (
                           <li
-                            className="flex items-start justify-between gap-3 rounded-lg border bg-card/60 p-3 transition-colors hover:bg-muted/40"
+                            className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/40"
                             key={task.id}
                           >
                             <div className="space-y-1">
@@ -483,12 +432,12 @@ export default function DashboardPage() {
                   </Card>
 
                   {/* Notifications */}
-                  <Card className="shadow-xs">
+                  <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                          <Bell className="size-4 text-primary" />
-                          Notifications
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                          <Bell className="size-4 text-muted-foreground" />
+                          System Alerts
                           {notifications?.unread_count ? (
                             <Badge variant="destructive" className="ml-1 px-1.5 py-0 text-[10px]">
                               {notifications.unread_count} unread
@@ -498,10 +447,10 @@ export default function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <ul className="space-y-2.5">
+                      <ul className="space-y-2">
                         {(notifications?.items ?? []).map((item) => (
                           <li
-                            className="flex items-start justify-between gap-3 rounded-lg border bg-card/60 p-3 transition-colors hover:bg-muted/40"
+                            className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/40"
                             key={item.id}
                           >
                             <div className="space-y-1">
@@ -534,7 +483,7 @@ export default function DashboardPage() {
                         {(!notifications || notifications.items.length === 0) &&
                           summary.notifications.map((item, index) => (
                             <li
-                              className="rounded-lg border p-3"
+                              className="rounded-lg border border-border/60 p-3"
                               key={`${item.kind}-${item.created_at}-${index}`}
                             >
                               <p className="text-sm font-medium text-foreground">{item.title}</p>
@@ -554,18 +503,18 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Recent Agent Executions */}
-                <Card className="shadow-xs">
+                <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                      <Cpu className="size-4 text-primary" />
-                      Recent agent executions
+                    <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                      <Cpu className="size-4 text-muted-foreground" />
+                      Recent Multi-Agent Executions
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="grid gap-3 sm:grid-cols-2">
                       {summary.recent_agent_runs.map((run) => (
                         <li
-                          className="flex items-start justify-between rounded-lg border bg-card/60 p-3 transition-colors hover:bg-muted/40"
+                          className="flex items-start justify-between rounded-lg border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/40"
                           key={run.id}
                         >
                           <div className="space-y-1">
@@ -586,7 +535,9 @@ export default function DashboardPage() {
                             title="No agent runs yet"
                             description="Agent runs initiated in the Workspace or Coding lab will appear here."
                             actionLabel="Open Workspace"
-                            actionHref="/workspace"
+                            onAction={() => {
+                              window.location.href = "/workspace";
+                            }}
                           />
                         </div>
                       )}
@@ -599,20 +550,20 @@ export default function DashboardPage() {
               <TabsContent value="deadlines" className="mt-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold">Upcoming deadlines</CardTitle>
-                    <CardDescription>Tasks scheduled across your enrolled courses</CardDescription>
+                    <CardTitle className="text-sm font-semibold">Upcoming deadlines</CardTitle>
+                    <CardDescription className="text-xs">Tasks scheduled across your enrolled courses</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ul className="space-y-2.5">
+                    <ul className="space-y-2">
                       {summary.upcoming_tasks.map((task) => (
-                        <li key={task.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <li key={task.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
                           <div>
-                            <p className="text-sm font-medium">{task.title}</p>
+                            <p className="text-sm font-medium text-foreground">{task.title}</p>
                             <p className="text-xs text-muted-foreground">
                               Due: {new Date(task.due_at).toLocaleString()}
                             </p>
                           </div>
-                          <Badge variant="outline">{task.priority}</Badge>
+                          <Badge variant="outline" className="text-xs">{task.priority}</Badge>
                         </li>
                       ))}
                       {summary.upcoming_tasks.length === 0 && (
@@ -631,14 +582,14 @@ export default function DashboardPage() {
               <TabsContent value="notifications" className="mt-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold">System Alerts</CardTitle>
+                    <CardTitle className="text-sm font-semibold">System Alerts</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ul className="space-y-2.5">
+                    <ul className="space-y-2">
                       {(notifications?.items ?? []).map((item) => (
-                        <li key={item.id} className="flex items-start justify-between rounded-lg border p-3">
+                        <li key={item.id} className="flex items-start justify-between rounded-lg border border-border/60 p-3">
                           <div>
-                            <p className="text-sm font-medium">{item.title}</p>
+                            <p className="text-sm font-medium text-foreground">{item.title}</p>
                             <p className="text-xs text-muted-foreground">{item.message}</p>
                           </div>
                           {!item.read_at && (
@@ -660,19 +611,27 @@ export default function DashboardPage() {
               <TabsContent value="agents" className="mt-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base font-semibold">Recent Multi-Agent Workflows</CardTitle>
+                    <CardTitle className="text-sm font-semibold">Recent Multi-Agent Workflows</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ul className="grid gap-3 sm:grid-cols-2">
                       {summary.recent_agent_runs.map((run) => (
-                        <li key={run.id} className="rounded-lg border p-3">
-                          <p className="text-sm font-medium">{run.title}</p>
+                        <li key={run.id} className="rounded-lg border border-border/60 p-3">
+                          <p className="text-sm font-medium text-foreground">{run.title}</p>
                           <p className="text-xs text-muted-foreground">{run.status}</p>
                         </li>
                       ))}
                       {summary.recent_agent_runs.length === 0 && (
                         <div className="col-span-full">
-                          <EmptyState icon={Cpu} title="No agent runs" description="Start a workflow in Workspace or Coding Lab." />
+                          <EmptyState
+                            icon={Cpu}
+                            title="No agent runs"
+                            description="Start a workflow in Workspace or Coding Lab."
+                            actionLabel="Open Workspace"
+                            onAction={() => {
+                              window.location.href = "/workspace";
+                            }}
+                          />
                         </div>
                       )}
                     </ul>
@@ -682,114 +641,6 @@ export default function DashboardPage() {
             </Tabs>
           </section>
         )}
-
-        {/* Quick Hub Navigation Cards */}
-        <section aria-labelledby="hub-heading" className="mt-10">
-          <div className="border-t border-border/60 pt-8">
-            <h2 id="hub-heading" className="text-lg font-semibold tracking-tight text-foreground">
-              Academic workspaces & studios
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select a specialized environment to start learning, researching, or coding.
-            </p>
-
-            <motion.div
-              className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-60px" }}
-              variants={stagger}
-            >
-              {[
-                {
-                  href: "/workspace",
-                  title: "AI workspace",
-                  description: "Upload course material and ask the multi-agent assistant questions with citations.",
-                  icon: FolderKanban,
-                },
-                {
-                  href: "/workspace#documents",
-                  title: "Knowledge hub",
-                  description: "Manage your private document library and search indexed sources.",
-                  icon: BookOpen,
-                },
-                {
-                  href: "/learning",
-                  title: "Learning studio",
-                  description: "Generate practice quizzes, track tasks, and create AI study plans.",
-                  icon: Sparkles,
-                },
-                {
-                  href: "/courses",
-                  title: "Courses",
-                  description: "Manage course workspaces, enrollments, and course knowledge access.",
-                  icon: GraduationCap,
-                },
-                {
-                  href: "/research",
-                  title: "Research studio",
-                  description: "Search Crossref papers, build a saved library, and ask for literature reviews.",
-                  icon: FileSearch,
-                },
-                {
-                  href: "/coding",
-                  title: "Coding lab",
-                  description: "Get programming tutoring, code review, debugging, and challenge feedback.",
-                  icon: Code2,
-                },
-              ].map((hub, i) => {
-                const Icon = hub.icon;
-                return (
-                  <motion.div key={hub.title} variants={fadeUp} custom={i}>
-                    <Link
-                      href={hub.href}
-                      className="group flex h-full flex-col justify-between rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/20">
-                            <Icon className="size-4" />
-                          </div>
-                          <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-1 group-hover:text-primary" />
-                        </div>
-                        <h3 className="mt-3.5 font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {hub.title}
-                        </h3>
-                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                          {hub.description}
-                        </p>
-                      </div>
-                    </Link>
-                  </motion.div>
-                );
-              })}
-
-              {profile?.role === "administrator" && (
-                <motion.div variants={fadeUp} custom={6}>
-                  <Link
-                    href="/admin"
-                    className="group flex h-full flex-col justify-between rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/20">
-                          <Shield className="size-4" />
-                        </div>
-                        <ArrowRight className="size-4 text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-1 group-hover:text-primary" />
-                      </div>
-                      <h3 className="mt-3.5 font-semibold text-foreground group-hover:text-primary transition-colors">
-                        Administration
-                      </h3>
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                        Review accounts and manage platform roles.
-                      </p>
-                    </div>
-                  </Link>
-                </motion.div>
-              )}
-            </motion.div>
-          </div>
-        </section>
       </main>
     </div>
   );

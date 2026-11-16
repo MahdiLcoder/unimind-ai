@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth, useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
@@ -24,6 +24,7 @@ import {
 
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -336,30 +337,11 @@ export default function WorkspaceContent() {
       <SiteHeader />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
-        {/* Workspace Title Header */}
-        <header className="mb-8 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              AI workspace
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Private knowledge and multi-agent chat for ISI Kef coursework
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              {user?.fullName ?? user?.primaryEmailAddress?.emailAddress}
-            </span>
-            <UserButton />
-          </div>
-        </header>
+        <PageHeader
+          title="AI Workspace"
+          description="Grounded multi-agent academic assistant with verified citations from your course documents"
+          className="mb-8"
+        />
 
         {error && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert">
@@ -384,7 +366,7 @@ export default function WorkspaceContent() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
           {/* Chat Assistant Section */}
-          <Card className="flex min-h-[38rem] flex-col shadow-xs">
+          <Card className="flex min-h-[38rem] flex-col">
             <CardHeader className="border-b px-5 py-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -573,7 +555,7 @@ export default function WorkspaceContent() {
           {/* Right Sidebar: Documents & Search */}
           <aside className="space-y-6">
             {/* Document Library */}
-            <Card id="documents" className="p-5 shadow-xs">
+            <Card id="documents" className="p-5">
               <CardTitle className="text-base font-semibold">Your document library</CardTitle>
               <CardDescription className="mt-1 text-xs text-muted-foreground">
                 Files are private to your account and indexed before upload completes.
@@ -614,9 +596,13 @@ export default function WorkspaceContent() {
                   </div>
                 )}
                 {!loadingDocuments && documents.length === 0 && (
-                  <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                    No documents uploaded yet.
-                  </p>
+                  <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-4 text-center">
+                    <FileText className="mx-auto size-5 text-muted-foreground/60" />
+                    <p className="mt-2 text-xs font-medium text-foreground">No documents uploaded yet</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
+                      Upload course slides, syllabus, or notes to chat with grounded citations.
+                    </p>
+                  </div>
                 )}
                 {documents.map((document) => (
                   <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -319,25 +320,11 @@ export default function CoursesContent() {
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-              <span>/</span>
-              <span>Courses</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Courses &amp; Modules</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              ISI Kef academic workspace enrollments, syllabus indexing, and course assignments.
-            </p>
-          </div>
-          <UserButton />
-        </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title="Courses & Modules"
+          description="ISI Kef academic workspace enrollments, syllabus indexing, and course assignments"
+        />
 
         {error && (
           <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
@@ -354,8 +341,8 @@ export default function CoursesContent() {
           <div className="mt-8 space-y-4" role="status">
             <p className="sr-only">Loading your courses…</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Skeleton className="h-44 w-full rounded-2xl" />
-              <Skeleton className="h-44 w-full rounded-2xl" />
+              <Skeleton className="h-44 w-full rounded-lg" />
+              <Skeleton className="h-44 w-full rounded-lg" />
             </div>
           </div>
         ) : (
@@ -408,7 +395,7 @@ export default function CoursesContent() {
 
                 <div className="grid gap-5 sm:grid-cols-2">
                   {displayedCourses.map((course) => (
-                    <Card key={course.id} className="flex flex-col justify-between shadow-xs">
+                    <Card key={course.id} className="flex flex-col justify-between">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
                           <Badge variant="outline" className="font-mono text-xs">

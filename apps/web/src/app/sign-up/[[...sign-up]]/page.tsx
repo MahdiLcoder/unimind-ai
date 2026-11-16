@@ -23,16 +23,11 @@ function AuthSkeleton() {
 
 export default function SignUpPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-background relative overflow-hidden">
-      {/* Ambient background glow */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/2 h-[450px] w-[650px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
-      </div>
-
+    <div className="flex min-h-screen flex-col bg-background">
       <Suspense fallback={<SiteHeaderFallback />}>
         <SiteHeader />
       </Suspense>
-      <main className="relative flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
+      <main className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
         <Suspense fallback={<AuthSkeleton />}>
           <SignUp path="/sign-up" signInUrl="/sign-in" forceRedirectUrl="/dashboard" />
         </Suspense>

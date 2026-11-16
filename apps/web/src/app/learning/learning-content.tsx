@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -344,27 +345,11 @@ export default function LearningContent() {
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-              <span>/</span>
-              <span>Learning</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-              Learning &amp; Study Studio
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Adaptive revision plans, assignment deadlines, and practice quizzes for ISI Kef students.
-            </p>
-          </div>
-          <UserButton />
-        </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title="Learning Studio"
+          description="Adaptive revision plans, assignment deadlines, and practice quizzes for ISI Kef coursework"
+        />
 
         {error && (
           <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
@@ -381,8 +366,8 @@ export default function LearningContent() {
           <div className="mt-8 space-y-4" role="status">
             <p className="sr-only">Loading your learning data…</p>
             <div className="grid gap-6 sm:grid-cols-2">
-              <Skeleton className="h-64 w-full rounded-2xl" />
-              <Skeleton className="h-64 w-full rounded-2xl" />
+              <Skeleton className="h-64 w-full rounded-lg" />
+              <Skeleton className="h-64 w-full rounded-lg" />
             </div>
           </div>
         ) : (
@@ -418,7 +403,7 @@ export default function LearningContent() {
                   <ul className="space-y-3">
                     {tasks.map((task) => (
                       <li key={task.id}>
-                        <Card className="p-4 shadow-xs">
+                        <Card className="p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
@@ -484,7 +469,7 @@ export default function LearningContent() {
 
                 {/* Add Task Form */}
                 <div>
-                  <Card className="p-5 shadow-xs sticky top-24">
+                  <Card className="p-5 sticky top-20">
                     <CardTitle className="text-base font-semibold">Add a task</CardTitle>
                     <CardDescription className="text-xs mt-1">
                       Set assignments, due dates, and study milestones.
@@ -532,7 +517,7 @@ export default function LearningContent() {
                   <ul className="space-y-3">
                     {plans.map((plan) => (
                       <li key={plan.id}>
-                        <Card className="p-5 shadow-xs">
+                        <Card className="p-5">
                           <CardTitle className="text-base font-semibold">{plan.title}</CardTitle>
                           <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1.5">
                             <Clock className="size-3" />
@@ -583,7 +568,7 @@ export default function LearningContent() {
 
                 {/* Generate Plan Form */}
                 <div>
-                  <Card className="p-5 shadow-xs">
+                  <Card className="p-5">
                     <CardTitle className="text-base font-semibold">Generate a study plan</CardTitle>
                     <CardDescription className="text-xs mt-1">
                       Our multi-agent planner balances topics, capacity, and deadlines.
@@ -685,7 +670,7 @@ export default function LearningContent() {
                 {/* Active Quiz Area & Saved Quizzes */}
                 <div className="space-y-6">
                   {activeQuiz ? (
-                    <Card className="p-6 shadow-sm border-primary/40">
+                    <Card className="p-6">
                       <form className="space-y-6" onSubmit={submitQuiz}>
                         <div>
                           <Badge variant="outline" className="mb-2">Active Quiz</Badge>
@@ -772,7 +757,7 @@ export default function LearningContent() {
                     <ul className="space-y-3">
                       {quizzes.map((quiz) => (
                         <li key={quiz.id}>
-                          <Card className="p-4 flex items-center justify-between shadow-xs">
+                          <Card className="p-4 flex items-center justify-between">
                             <div>
                               <p className="font-medium text-sm text-foreground">{quiz.title}</p>
                               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -809,7 +794,7 @@ export default function LearningContent() {
 
                 {/* Generator Form */}
                 <div>
-                  <Card className="p-5 shadow-xs sticky top-24">
+                  <Card className="p-5 sticky top-20">
                     <CardTitle className="text-base font-semibold">Generate a quiz</CardTitle>
                     <CardDescription className="text-xs mt-1">
                       AI crafts targeted multiple-choice questions with instant scoring.

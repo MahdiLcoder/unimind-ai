@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -249,31 +250,28 @@ export default function CodingContent() {
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-              <span>/</span>
-              <span>Coding Lab</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Coding Lab &amp; Sandbox</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Sandboxed execution and AI programming tutor built for ISI Kef computer science students.
-            </p>
-          </div>
-          <UserButton />
-        </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title="Coding Lab"
+          description="Sandboxed Python execution and AI programming assistant for ISI Kef coursework"
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={newConversation}
+            type="button"
+            className="gap-1.5"
+          >
+            <RotateCcw className="size-3.5" />
+            New Session
+          </Button>
+        </PageHeader>
 
         {/* Security Sandbox Alert */}
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-foreground" role="note">
+        <div className="mt-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-foreground" role="note">
           <ShieldAlert className="size-4 text-amber-600 shrink-0 mt-0.5" />
           <p>
-            Python runs in a short-lived, non-root container with no network access and bounded CPU, memory, time, and output. Only Python standard-library code is available.
+            Python runs in a short-lived, non-root sandbox with no network access and bounded CPU, memory, time (5s limit), and output size. Standard library only.
           </p>
         </div>
 
@@ -284,7 +282,7 @@ export default function CodingContent() {
         )}
 
         {/* Coding Assistant Workspace */}
-        <Card className="mt-6 p-6 shadow-xs">
+        <Card className="mt-6 p-6">
           <form className="grid gap-5 sm:grid-cols-2" onSubmit={submit}>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-foreground" htmlFor="coding-mode">
@@ -407,7 +405,7 @@ export default function CodingContent() {
 
         {/* Execution Output Panel */}
         {execution && (
-          <Card className="mt-6 shadow-sm border-border" aria-live="polite">
+          <Card className="mt-6" aria-live="polite">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -461,7 +459,7 @@ export default function CodingContent() {
 
         {/* Coding Agent Response Card */}
         {answer && (
-          <Card className="mt-6 shadow-sm border-primary/30" aria-live="polite">
+          <Card className="mt-6" aria-live="polite">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <Sparkles className="size-4 text-primary" />

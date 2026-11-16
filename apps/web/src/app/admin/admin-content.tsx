@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -204,27 +205,11 @@ export default function AdminContent() {
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-              <span>/</span>
-              <span>Admin</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-              Administration
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Governance, role-based access, and security audit logs for ISI Kef academic platform.
-            </p>
-          </div>
-          <UserButton />
-        </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title="Administration"
+          description="Governance, role-based access control, and audit logs for ISI Kef academic platform"
+        />
 
         {error && (
           <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
@@ -300,7 +285,7 @@ export default function AdminContent() {
 
             {/* Users Section */}
             <section id="users-section" aria-labelledby="users-heading">
-              <Card className="p-6 shadow-xs">
+              <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <CardTitle id="users-heading" className="text-xl font-semibold">
@@ -377,7 +362,7 @@ export default function AdminContent() {
 
             {/* Platform Features Section */}
             <section id="features-section" aria-labelledby="features-heading" className="border-t pt-8">
-              <Card className="p-6 shadow-xs">
+              <Card className="p-6">
                 <CardTitle id="features-heading" className="text-xl font-semibold">
                   Platform features
                 </CardTitle>
@@ -416,7 +401,7 @@ export default function AdminContent() {
 
             {/* Workspaces Section */}
             <section id="workspaces-section" aria-labelledby="workspaces-heading" className="border-t pt-8">
-              <Card className="p-6 shadow-xs">
+              <Card className="p-6">
                 <CardTitle id="workspaces-heading" className="text-xl font-semibold">
                   Workspaces
                 </CardTitle>
@@ -459,7 +444,7 @@ export default function AdminContent() {
 
             {/* Audit Logs Section */}
             <section id="audit-section" aria-labelledby="audit-heading" className="border-t pt-8">
-              <Card className="p-6 shadow-xs">
+              <Card className="p-6">
                 <CardTitle id="audit-heading" className="text-xl font-semibold">
                   Audit logs
                 </CardTitle>

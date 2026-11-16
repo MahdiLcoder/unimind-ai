@@ -73,7 +73,7 @@
   --chart-3: oklch(0.6 0.18 310);
   --chart-4: oklch(0.7 0.15 140);
   --chart-5: oklch(0.65 0.2 30);
-  --radius: 0.75rem;
+  --radius: 0.625rem;
   --sidebar: oklch(0.98 0.005 260);
   --sidebar-foreground: oklch(0.13 0.02 260);
   --sidebar-primary: oklch(0.55 0.22 270);
@@ -127,17 +127,5 @@
   }
   html {
     @apply font-sans;
-  }
-}
-
-@layer utilities {
-  .text-gradient-primary {
-    @apply bg-gradient-to-r from-[oklch(0.55_0.22_270)] via-[oklch(0.6_0.2_240)] to-[oklch(0.65_0.18_200)] bg-clip-text text-transparent;
-  }
-  .glow-primary {
-    box-shadow: 0 0 20px oklch(0.55 0.22 270 / 15%), 0 0 60px oklch(0.55 0.22 270 / 5%);
-  }
-  .glow-primary-lg {
-    box-shadow: 0 0 30px oklch(0.55 0.22 270 / 20%), 0 0 80px oklch(0.55 0.22 270 / 8%);
   }
 }

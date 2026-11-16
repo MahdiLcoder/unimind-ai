@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -189,27 +190,11 @@ export default function ResearchContent() {
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
-                UniMind AI
-              </Link>
-              <span>/</span>
-              <span>ISI Kef</span>
-              <span>/</span>
-              <span>Research</span>
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-              Research Studio &amp; Citations
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Discover Crossref papers and synthesize evidence-grounded reviews for ISI Kef research projects.
-            </p>
-          </div>
-          <UserButton />
-        </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8">
+        <PageHeader
+          title="Research Studio"
+          description="Discover Crossref academic papers and generate evidence-grounded literature reviews for ISI Kef coursework"
+        />
 
         {error && (
           <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
@@ -292,7 +277,7 @@ export default function ResearchContent() {
             <ul className="mt-6 space-y-4">
               {papers.map((paper) => (
                 <li key={paper.id}>
-                  <Card className="p-5 shadow-xs transition-colors hover:border-primary/40">
+                  <Card className="p-5 transition-colors hover:border-border">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1 flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -372,7 +357,7 @@ export default function ResearchContent() {
 
         {/* Generated Review */}
         {review && (
-          <Card className="mt-8 p-6 shadow-sm border-primary/30" aria-live="polite">
+          <Card className="mt-8 p-6" aria-live="polite">
             <CardHeader className="p-0 pb-4">
               <CardTitle className="text-xl font-semibold flex items-center gap-2">
                 <Sparkles className="size-5 text-primary" />
@@ -392,7 +377,7 @@ export default function ResearchContent() {
 
         {/* Bibliography Section */}
         {papers.length > 0 && (
-          <Card className="mt-8 p-6 shadow-xs">
+          <Card className="mt-8 p-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-base flex items-center gap-2">
                 <Quote className="size-4 text-primary" />

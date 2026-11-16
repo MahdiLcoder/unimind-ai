@@ -24,19 +24,19 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.96 }}
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className={`flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/15 px-6 py-12 text-center backdrop-blur-xs ${className}`}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className={`flex flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center ${className}`}
     >
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/10">
-        <Icon className="size-7" aria-hidden="true" />
+      <div className="flex size-11 items-center justify-center rounded-lg border border-border/60 bg-background text-muted-foreground shadow-xs">
+        <Icon className="size-5" aria-hidden="true" />
       </div>
-      <h3 className="mt-5 text-base font-semibold tracking-tight text-foreground">{title}</h3>
-      <p className="mt-2 max-w-sm text-sm text-muted-foreground leading-relaxed">{description}</p>
+      <h3 className="mt-4 text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      <p className="mt-1.5 max-w-sm text-xs text-muted-foreground leading-relaxed">{description}</p>
       {actionLabel && onAction && (
-        <div className="mt-6">
-          <Button size="sm" onClick={onAction} className="shadow-sm shadow-primary/20">
+        <div className="mt-5">
+          <Button size="sm" onClick={onAction}>
             {actionLabel}
           </Button>
         </div>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { useState, Suspense } from "react";
-import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -49,20 +48,15 @@ function SiteHeaderContent() {
   const [open, setOpen] = useState(false);
 
   return (
-    <motion.header
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60"
-    >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Brand */}
         <div className="flex items-center gap-6">
           <Link
             href="/"
             className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-primary/30">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors group-hover:bg-primary/90">
               <Eye className="size-5" />
             </div>
             <div className="flex flex-col">
@@ -99,30 +93,19 @@ function SiteHeaderContent() {
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-muted text-foreground font-semibold"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   )}
                 >
                   <Icon
                     className={cn(
-                      "size-4",
-                      isActive ? "text-primary" : "text-muted-foreground"
+                      "size-3.5",
+                      isActive ? "text-foreground" : "text-muted-foreground"
                     )}
                   />
                   {item.name}
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-indicator"
-                      className="absolute inset-0 rounded-lg bg-primary/8 border border-primary/15"
-                      transition={{
-                        type: "spring",
-                        stiffness: 380,
-                        damping: 30,
-                      }}
-                    />
-                  )}
                 </Link>
               );
             })}
@@ -188,34 +171,28 @@ function SiteHeaderContent() {
                 aria-label="Mobile Navigation"
                 className="mt-6 flex flex-col gap-1"
               >
-                {navItems.map((item, index) => {
+                {navItems.map((item) => {
                   const currentPath = pathname ?? "";
                   const isActive =
                     currentPath === item.href ||
                     currentPath.startsWith(`${item.href}/`);
                   const Icon = item.icon;
                   return (
-                    <motion.div
+                    <Link
                       key={item.href}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05, duration: 0.3 }}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        isActive
+                          ? "bg-primary/10 text-primary border border-primary/15"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
                     >
-                      <Link
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        aria-current={isActive ? "page" : undefined}
-                        className={cn(
-                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          isActive
-                            ? "bg-primary/10 text-primary border border-primary/15"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        <Icon className="size-4" />
-                        {item.name}
-                      </Link>
-                    </motion.div>
+                      <Icon className="size-4" />
+                      {item.name}
+                    </Link>
                   );
                 })}
               </nav>
@@ -246,20 +223,20 @@ function SiteHeaderContent() {
           </Sheet>
         </div>
       </div>
-    </motion.header>
+    </header>
   );
 }
 
 export function SiteHeaderFallback() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
           <Link
             href="/"
             className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Eye className="size-5" />
             </div>
             <div className="flex flex-col">
@@ -312,7 +289,6 @@ export function SiteHeaderFallback() {
               href="/sign-up"
               className={buttonVariants({
                 size: "sm",
-                className: "shadow-sm shadow-primary/20",
               })}
             >
               Get started
