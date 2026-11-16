@@ -2,10 +2,15 @@
   "name": "unimind-ai",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "pnpm --dir apps/web dev",
-    "build": "pnpm --dir apps/web build",
-    "lint": "pnpm --dir apps/web lint",
-    "typecheck": "pnpm --dir apps/web exec tsc --noEmit"
+    "dev": "dotenv -e .env -- pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter web typecheck",
+    "check": "pnpm lint && pnpm typecheck"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^10.0.0"
   }
 }

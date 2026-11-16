@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { apiRequest } from "@/lib/api";
 
-interface ConnectionResponse {
-  success: boolean;
-  message: string;
-}
+const connectionResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
+type ConnectionResponse = z.infer<typeof connectionResponseSchema>;
 
 export default function ApiTestPage() {
   const [result, setResult] = useState<ConnectionResponse | null>(null);
@@ -14,29 +17,29 @@ export default function ApiTestPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiRequest<ConnectionResponse>("/api/v1/test")
+    apiRequest("/api/v1/test", connectionResponseSchema)
       .then(setResult)
-      .catch((err: Error) => setError(err.message))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Unexpected API error"),
+      )
       .finally(() => setLoading(false));
   }, []);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
-      <div className="max-w-xl rounded-xl border p-8">
+      <div className="max-w-xl rounded-xl border bg-white p-8 shadow-sm">
         <h1 className="mb-4 text-2xl font-bold">
           UniMind AI — API Connection
         </h1>
 
         {loading && <p>Connecting to FastAPI...</p>}
-
         {result && (
-          <p className="text-green-600">
-            ✓ {result.message}
+          <p className="text-green-700" role="status">
+            {result.message}
           </p>
         )}
-
         {error && (
-          <p className="text-red-600">
+          <p className="text-red-700" role="alert">
             Connection failed: {error}
           </p>
         )}

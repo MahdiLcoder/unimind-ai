@@ -1,7 +1,10 @@
-# Environment variables
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
 # Node.js
 node_modules/
@@ -14,9 +17,10 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.python-version
+.ruff_cache/
 .pytest_cache/
 .mypy_cache/
-.ruff_cache/
 
 # IDE
 .vscode/
@@ -31,6 +35,10 @@ venv/
 # Test coverage
 coverage/
 htmlcov/
+
+# Build artifacts
+*.tsbuildinfo
+*.egg-info/
 
 # Temporary files
 tmp/
