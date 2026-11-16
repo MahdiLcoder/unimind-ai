@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { shadcn } from "@clerk/ui/themes";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/sonner";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={cn("h-full antialiased", "font-sans", geist.variable)}>
-      <body className="flex min-h-full flex-col">
+      <body className="flex min-h-full flex-col bg-background text-foreground">
         <ClerkProvider
           dynamic
           publishableKey={
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           appearance={{ theme: shadcn }}
         >
           {children}
+          <Toaster position="top-right" />
         </ClerkProvider>
       </body>
     </html>
