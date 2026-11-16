@@ -119,7 +119,7 @@ route guards. The binary is available at
 **Running the browser tests requires:**
 
 1. A running Next.js server pointed to by `PLAYWRIGHT_TEST_BASE_URL`
-   (default: `http://localhost:3001`).
+   (default: `http://localhost:3000`).
 2. A browser. Two options:
    - **System Chrome (recommended locally):** Set `PLAYWRIGHT_CHANNEL=chrome`
      in `.env` or as an environment variable. Playwright will use the installed
@@ -135,12 +135,12 @@ running it. In a standard development environment with network access:
 
 ```bash
 # Option A: use system Chrome (no download)
-PLAYWRIGHT_CHANNEL=chrome PLAYWRIGHT_TEST_BASE_URL=http://localhost:3001 \
+PLAYWRIGHT_CHANNEL=chrome PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000 \
   pnpm --filter web test:e2e
 
 # Option B: download Playwright Chromium first (requires network)
 cd apps/web && pnpm exec playwright install chromium
-PLAYWRIGHT_TEST_BASE_URL=http://localhost:3001 pnpm --filter web test:e2e
+PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000 pnpm --filter web test:e2e
 ```
 
 The E2E tests do not run as part of `pnpm check` (which runs only vitest unit
