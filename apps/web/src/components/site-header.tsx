@@ -83,9 +83,6 @@ function SiteHeaderContent() {
                   ISI Kef
                 </Badge>
               </div>
-              <span className="text-[10px] text-muted-foreground hidden sm:block font-mono leading-none mt-0.5">
-                #AB-Mahdi
-              </span>
             </div>
           </Link>
 
@@ -186,9 +183,6 @@ function SiteHeaderContent() {
                     ISI Kef
                   </Badge>
                 </SheetTitle>
-                <p className="text-[11px] text-muted-foreground font-mono">
-                  #AB-Mahdi · AI-Vision
-                </p>
               </SheetHeader>
               <nav
                 aria-label="Mobile Navigation"
@@ -286,9 +280,6 @@ export function SiteHeaderFallback() {
                   ISI Kef
                 </Badge>
               </div>
-              <span className="text-[10px] text-muted-foreground hidden sm:block font-mono leading-none mt-0.5">
-                #AB-Mahdi
-              </span>
             </div>
           </Link>
 
