@@ -37,8 +37,11 @@ class LearningAgent:
             "or knowledge-gap analysis). Use the learner role and prior "
             "conversation for personalization. Distinguish established "
             "facts from assumptions. Return only the requested structured "
-            "schema. For an answer evaluation, include the student's answer, "
-            "a reference answer, helpful feedback, and identified gaps."
+            "schema. Every item must include a choices list; use an empty "
+            "list when choices do not apply. For multiple-choice quizzes, "
+            "include exactly four distinct choices per item. For an answer "
+            "evaluation, include the student's answer, a reference answer, "
+            "helpful feedback, and identified gaps."
         )
         self._chain = (
             ChatPromptTemplate.from_messages(

@@ -134,7 +134,7 @@ class LearningItem(BaseModel):
     kind: str
     prompt: str
     answer: str
-    choices: list[str] = Field(default_factory=list)
+    choices: list[str]
     explanation: str = ""
 
 

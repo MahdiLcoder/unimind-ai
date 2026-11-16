@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from langchain_core.documents import Document
@@ -64,6 +65,19 @@ class PermissionScopedRetriever(BaseRetriever):
                 top_k=top_k or self.top_k,
             )
 
+    def _get_relevant_documents(
+        self,
+        query: str,
+        *,
+        run_manager: Any,
+    ) -> list[Document]:
+        del run_manager
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self._load_relevant_documents(query))
+        raise RuntimeError("Use ainvoke() when an event loop is already running")
+
     async def _aget_relevant_documents(
         self,
         query: str,
@@ -71,6 +85,9 @@ class PermissionScopedRetriever(BaseRetriever):
         run_manager: Any,
     ) -> list[Document]:
         del run_manager
+        return await self._load_relevant_documents(query)
+
+    async def _load_relevant_documents(self, query: str) -> list[Document]:
         result = await self.retrieve(query)
         return [
             Document(

@@ -34,6 +34,7 @@ class AgentGraphs:
     supervisor: Any
     knowledge_qa: Any
     learning: Any
+    planning: Any
     combined: Any
 
 
@@ -80,11 +81,11 @@ def create_agent_graphs(
             return _routing_update(
                 state,
                 RoutingDecision(
-                    intent=(
-                        Intent.KNOWLEDGE_QUESTION
-                        if agent_name == AgentName.KNOWLEDGE
-                        else Intent.LEARNING_ACTIVITY
-                    ),
+                    intent={
+                        AgentName.KNOWLEDGE: Intent.KNOWLEDGE_QUESTION,
+                        AgentName.LEARNING: Intent.LEARNING_ACTIVITY,
+                        AgentName.PLANNING: Intent.PLANNING_TASK,
+                    }.get(agent_name, Intent.MULTI_AGENT_TASK),
                     selected_agents=(agent_name,),
                     plan=(f"Run the {agent_name.value} workflow.",),
                     parallel=False,
@@ -246,7 +247,16 @@ def create_agent_graphs(
             if sections
             else "I could not complete this request. Please try again."
         )
-        event = _event(state, "response_ready", response)
+        sources: list[dict[str, object]] = []
+        for agent_name in state.get("selected_agents", []):
+            output = outputs.get(agent_name.value, {})
+            for key in ("sources", "papers", "documentation"):
+                items = output.get(key, [])
+                if isinstance(items, list):
+                    sources.extend(item for item in items if isinstance(item, dict))
+                    if items:
+                        break
+        event = _event(state, "response_ready", response, metadata={"sources": sources})
         return {
             "final_response": response,
             "conversation_history": [AIMessage(content=response)],
@@ -319,6 +329,7 @@ def create_agent_graphs(
         supervisor=supervisor_builder.compile(checkpointer=checkpointer),
         knowledge_qa=knowledge_graph,
         learning=single_agent_graph(AgentName.LEARNING),
+        planning=single_agent_graph(AgentName.PLANNING),
         combined=combined_builder.compile(checkpointer=checkpointer),
     )
 

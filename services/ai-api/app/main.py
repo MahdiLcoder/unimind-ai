@@ -5,7 +5,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, health, v1
+from app.api import (
+    admin,
+    agents,
+    coding,
+    courses,
+    dashboard,
+    documents,
+    health,
+    learning,
+    notifications,
+    research,
+    users,
+    v1,
+)
 from app.core.cache import redis_client
 from app.core.config import settings
 from app.core.database import engine
@@ -47,6 +60,15 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(v1.router)
 app.include_router(agents.router, prefix="/api/v1")
+app.include_router(documents.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(courses.router, prefix="/api/v1")
+app.include_router(learning.router, prefix="/api/v1")
+app.include_router(research.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(coding.router, prefix="/api/v1")
 
 
 @app.get("/")

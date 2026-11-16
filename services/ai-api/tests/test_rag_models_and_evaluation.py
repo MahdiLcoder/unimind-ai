@@ -120,6 +120,7 @@ def test_model_config_uses_environment_selection(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("HF_EMBEDDING_MODEL", "BAAI/bge-m3")
     monkeypatch.setenv("HF_EMBEDDING_DIMENSIONS", "1024")
     monkeypatch.setenv("HF_RERANKER_MODEL", "BAAI/bge-reranker-base")
+    monkeypatch.setenv("HF_RERANKER_ENABLED", "false")
     monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:3b")
 
     settings = RAGModelSettings.from_environment()
@@ -127,7 +128,15 @@ def test_model_config_uses_environment_selection(monkeypatch: pytest.MonkeyPatch
     assert settings.embedding.model_id == "BAAI/bge-m3"
     assert settings.embedding.dimensions == 1024
     assert settings.reranker.model_id == "BAAI/bge-reranker-base"
+    assert settings.reranker_enabled is False
     assert settings.generation.model_id == "qwen2.5:3b"
+
+
+def test_model_config_rejects_invalid_reranker_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HF_RERANKER_ENABLED", "sometimes")
+
+    with pytest.raises(ValueError, match="HF_RERANKER_ENABLED must be a boolean"):
+        RAGModelSettings.from_environment()
 
 
 def test_repository_filters_include_identity_course_and_model() -> None:

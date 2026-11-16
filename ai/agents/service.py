@@ -5,7 +5,7 @@ import hashlib
 import logging
 import os
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 from uuid import UUID
@@ -58,11 +58,13 @@ class AgentService:
         event_store: AgentEventStore,
         *,
         checkpoint_context: AbstractAsyncContextManager[AsyncPostgresSaver] | None = None,
+        rag_service: RAGService | None = None,
     ) -> None:
         self.graphs = graphs
         self.checkpointer = checkpointer
         self.event_store = event_store
         self._checkpoint_context = checkpoint_context
+        self.rag_service = rag_service
 
     async def invoke(self, request: AgentRunRequest) -> AgentRunResponse:
         config = self._config(request.user_id, request.conversation_id)
@@ -79,6 +81,44 @@ class AgentService:
             raise
         await self._persist_state_events(request, state)
         return self._response(request, state)
+
+    async def invoke_learning(self, request: AgentRunRequest) -> AgentState:
+        return await self._invoke_specialist(
+            lambda: self.graphs.learning.ainvoke(
+                self._input(request),
+                config=self._config(request.user_id, request.conversation_id),
+            ),
+            request,
+            "Learning",
+        )
+
+    async def invoke_planning(self, request: AgentRunRequest) -> AgentState:
+        return await self._invoke_specialist(
+            lambda: self.graphs.planning.ainvoke(
+                self._input(request),
+                config=self._config(request.user_id, request.conversation_id),
+            ),
+            request,
+            "Planning",
+        )
+
+    async def _invoke_specialist(
+        self,
+        invoke: Callable[[], Awaitable[AgentState]],
+        request: AgentRunRequest,
+        name: str,
+    ) -> AgentState:
+        try:
+            state = await invoke()
+        except Exception:
+            logger.exception(
+                "%s graph execution failed",
+                name,
+                extra={"request_id": str(request.request_id)},
+            )
+            raise
+        await self._persist_state_events(request, state)
+        return state
 
     async def stream(self, request: AgentRunRequest) -> AsyncIterator[AgentStreamEvent]:
         config = self._config(request.user_id, request.conversation_id)
@@ -220,10 +260,10 @@ class PostgresAgentEventStore:
         user_id: str,
         conversation_id: UUID,
     ) -> list[AgentStreamEvent]:
-        from app.models.agent_events import AgentExecutionEvent
         from sqlalchemy import select
 
         from ai.agents.schemas import AgentName
+        from app.models.agent_events import AgentExecutionEvent
 
         async with self.session_factory() as session:
             rows = (
@@ -292,7 +332,7 @@ def create_default_agent_service(
     official_email = os.getenv("CROSSREF_MAILTO")
     rag_service = RAGService(
         SentenceTransformerEmbedder(),
-        reranker=BGEReranker(),
+        reranker=BGEReranker() if settings.reranker_enabled else None,
         generator=generator,
     )
     graphs = create_agent_graphs(
@@ -324,6 +364,7 @@ def create_default_agent_service(
         graphs,
         checkpointer,
         event_store or PostgresAgentEventStore(session_factory),
+        rag_service=rag_service,
     )
 
 

@@ -39,19 +39,21 @@ class _RecordingAgent:
             await asyncio.sleep(0.02)
             self.active_counter[0] -= 1
         self.top_k.append(5 * (2 ** int(state.get("retry_count", 0))))
+        sources = (
+            [{"citation": "[doc:1234]"}]
+            if self.name == AgentName.KNOWLEDGE and self.sufficient
+            else []
+        )
         return {
             "agent_outputs": {
                 self.name.value: {
                     "content": f"{self.name.value} result",
                     "evidence_sufficient": self.sufficient,
                     "citation_valid": self.sufficient,
+                    "sources": sources,
                 }
             },
-            "sources": (
-                [{"citation": "[doc:1234]"}]
-                if self.name == AgentName.KNOWLEDGE and self.sufficient
-                else []
-            ),
+            "sources": sources,
         }
 
 
@@ -120,6 +122,12 @@ async def test_supervisor_routes_knowledge_and_learning_requests() -> None:
     assert learning_state["selected_agents"] == [AgentName.LEARNING]
     assert knowledge.top_k == [5]
     assert learning.top_k == [5]
+    response_event = next(
+        event
+        for event in knowledge_state["events"]
+        if event["event_type"] == "response_ready"
+    )
+    assert response_event["metadata"]["sources"] == [{"citation": "[doc:1234]"}]
 
 
 @pytest.mark.asyncio

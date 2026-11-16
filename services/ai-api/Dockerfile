@@ -10,7 +10,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY services/ai-api/pyproject.toml services/ai-api/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+ARG INSTALL_HF_INFERENCE=false
+RUN if [ "$INSTALL_HF_INFERENCE" = "true" ]; then \
+      uv sync --frozen --no-dev --no-install-project --group inference; \
+    else \
+      uv sync --frozen --no-dev --no-install-project; \
+    fi
 
 COPY services/ai-api/alembic.ini ./
 COPY services/ai-api/app ./app

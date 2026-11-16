@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
     cors_origins: str = "http://localhost:3000"
+    clerk_jwks_url: str | None = None
+    clerk_issuer: str | None = None
+    clerk_authorized_parties: str = ""
+    admin_clerk_user_ids: str = ""
+    code_runner_url: str | None = None
 
     @property
     def sqlalchemy_database_url(self) -> str:
@@ -41,6 +46,22 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def authorized_clerk_parties(self) -> frozenset[str]:
+        return frozenset(
+            party.strip()
+            for party in self.clerk_authorized_parties.split(",")
+            if party.strip()
+        )
+
+    @property
+    def bootstrap_admin_user_ids(self) -> frozenset[str]:
+        return frozenset(
+            user_id.strip()
+            for user_id in self.admin_clerk_user_ids.split(",")
+            if user_id.strip()
+        )
 
 
 @lru_cache

@@ -21,7 +21,7 @@ class PlannedTask(BaseModel):
 class PlanningResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    summary: str
+    summary: str = Field(min_length=1, max_length=4000)
     tasks: list[PlannedTask] = Field(default_factory=list, max_length=50)
     overload_warning: str | None = None
     assumptions: list[str] = Field(default_factory=list, max_length=20)

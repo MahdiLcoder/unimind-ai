@@ -127,7 +127,8 @@ class RAGService:
         )
         if len(vectors) != len(chunks):
             raise ValueError("Embedding provider returned an unexpected batch size")
-        async with session.begin():
+
+        async def persist() -> None:
             await self.repository.index_document(
                 session,
                 owner_id=owner_id,
@@ -139,6 +140,13 @@ class RAGService:
                 embedding_model=self.embedder.model_id,
                 content_hash=hashlib.sha256(content).hexdigest(),
             )
+
+        if session.in_transaction():
+            await persist()
+            await session.commit()
+        else:
+            async with session.begin():
+                await persist()
         return document_id
 
     async def retrieve(

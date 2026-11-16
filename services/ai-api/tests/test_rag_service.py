@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class _MemorySession:
+    def in_transaction(self) -> bool:
+        return False
+
     def begin(self) -> _MemorySession:
         return self
 

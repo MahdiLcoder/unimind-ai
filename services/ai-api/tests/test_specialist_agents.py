@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import httpx
@@ -9,12 +10,16 @@ import pytest
 from ai.agents.coding import CodingAgent
 from ai.agents.planning import PlanningAgent, PlanningResponse
 from ai.agents.research import CrossrefSearch, ResearchAgent
+from ai.agents.retriever import PermissionScopedRetriever
 from ai.agents.routing import route_request
 from ai.agents.schemas import AgentName, AgentRunRequest, UserRole
 from ai.agents.service import AgentService
 from ai.agents.university_services import UniversityServicesAgent
 from ai.graphs.agent_workflows import create_agent_graphs
+from ai.rag.postgres import RetrievedChunk
+from ai.rag.service import RAGService, RetrievalResult
 from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 def _state(message: str = "Help me plan my week") -> dict[str, object]:
@@ -72,6 +77,47 @@ class _GraphAgent:
         }
 
 
+class _RetrieverSession:
+    async def __aenter__(self) -> _RetrieverSession:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+
+class _RetrieverSessionFactory:
+    def __call__(self) -> _RetrieverSession:
+        return _RetrieverSession()
+
+
+class _RetrieverRAGService:
+    def __init__(self) -> None:
+        self.query_scope: tuple[str, str, frozenset[str], int] | None = None
+
+    async def retrieve(
+        self,
+        _session: AsyncSession,
+        query: str,
+        *,
+        user_id: str,
+        allowed_course_ids: frozenset[str],
+        top_k: int,
+    ) -> RetrievalResult:
+        chunk = RetrievedChunk(
+            id=uuid4(),
+            document_id=uuid4(),
+            course_id="course-42",
+            content="The library opens at eight.",
+            chunk_index=0,
+            page_number=3,
+            section_title="Hours",
+            source_filename="campus-guide.pdf",
+            score=0.82,
+        )
+        self.query_scope = (query, user_id, allowed_course_ids, top_k)
+        return RetrievalResult(query=query, chunks=(chunk,), latency_ms=0)
+
+
 @pytest.mark.asyncio
 async def test_crossref_search_parses_real_metadata_and_research_uses_it() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -107,6 +153,48 @@ async def test_crossref_search_parses_real_metadata_and_research_uses_it() -> No
     assert paper["year"] == 2024
     assert "Evidence from a study." in model.prompts[0]
     assert result["agent_outputs"]["research"]["evidence_sufficient"] is True
+
+
+@pytest.mark.asyncio
+async def test_permission_scoped_retriever_supports_async_invocation() -> None:
+    rag_service = _RetrieverRAGService()
+    retriever = PermissionScopedRetriever(
+        rag_service=cast(RAGService, rag_service),
+        session_factory=cast(
+            async_sessionmaker[AsyncSession],
+            _RetrieverSessionFactory(),
+        ),
+        user_id="student-1",
+        allowed_course_ids=frozenset({"course-42"}),
+    )
+
+    documents = await retriever.ainvoke("When does the library open?")
+
+    assert len(documents) == 1
+    assert documents[0].page_content == "The library opens at eight."
+    assert documents[0].metadata["source_filename"] == "campus-guide.pdf"
+    assert rag_service.query_scope == (
+        "When does the library open?",
+        "student-1",
+        frozenset({"course-42"}),
+        5,
+    )
+
+
+def test_permission_scoped_retriever_supports_sync_invocation() -> None:
+    retriever = PermissionScopedRetriever(
+        rag_service=cast(RAGService, _RetrieverRAGService()),
+        session_factory=cast(
+            async_sessionmaker[AsyncSession],
+            _RetrieverSessionFactory(),
+        ),
+        user_id="student-1",
+    )
+
+    documents = retriever.invoke("When does the library open?")
+
+    assert len(documents) == 1
+    assert documents[0].page_content == "The library opens at eight."
 
 
 @pytest.mark.asyncio
@@ -201,4 +289,3 @@ async def test_complex_route_runs_three_agents_with_research_dependency_first() 
     event_types = [event["event_type"] for event in state["events"]]
     assert "agent_batch_ready" in event_types
     assert event_types[-1] == "response_ready"
-

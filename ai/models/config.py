@@ -31,6 +31,7 @@ class RAGModelSettings:
     reranker: ModelConfig
     generation: ModelConfig
     ollama_base_url: str = "http://localhost:11434"
+    reranker_enabled: bool = True
 
     @classmethod
     def from_environment(cls) -> "RAGModelSettings":
@@ -60,4 +61,17 @@ class RAGModelSettings:
                 "OLLAMA_BASE_URL",
                 "http://localhost:11434",
             ).rstrip("/"),
+            reranker_enabled=_environment_flag("HF_RERANKER_ENABLED", default=True),
         )
+
+
+def _environment_flag(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
