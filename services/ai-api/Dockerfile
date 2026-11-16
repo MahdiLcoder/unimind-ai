@@ -9,12 +9,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY services/ai-api/pyproject.toml services/ai-api/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY alembic.ini ./
-COPY app ./app
-COPY migrations ./migrations
+COPY services/ai-api/alembic.ini ./
+COPY services/ai-api/app ./app
+COPY services/ai-api/migrations ./migrations
+COPY ai ./ai
 
 EXPOSE 8000
 

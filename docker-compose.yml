@@ -33,7 +33,8 @@ services:
 
   ai-api:
     build:
-      context: ./services/ai-api
+      context: .
+      dockerfile: services/ai-api/Dockerfile
     restart: unless-stopped
     environment:
       APP_ENV: ${APP_ENV:-development}
