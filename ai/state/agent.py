@@ -26,16 +26,20 @@ class AgentState(TypedDict, total=False):
     conversation_history: Annotated[list[AnyMessage], add_messages]
     detected_intent: Intent
     execution_plan: list[str]
+    execution_batches: list[list[AgentName]]
+    batch_index: int
     selected_agents: list[AgentName]
     agents_to_run: list[AgentName]
     current_agent: AgentName
     retry_requested: bool
+    stage_complete: bool
     agent_outputs: Annotated[dict[str, dict[str, object]], merge_agent_outputs]
     retrieved_documents: Annotated[list[dict[str, object]], operator_add]
     sources: Annotated[list[dict[str, object]], operator_add]
     errors: Annotated[list[dict[str, str]], operator_add]
     events: Annotated[list[dict[str, object]], operator_add]
     retry_count: int
+    agent_retry_counts: dict[str, int]
     final_response: str
 
 

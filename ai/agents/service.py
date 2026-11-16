@@ -16,8 +16,11 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ai.agents.coding import CodingAgent
 from ai.agents.knowledge import KnowledgeAgent
 from ai.agents.learning import LearningAgent
+from ai.agents.planning import PlanningAgent
+from ai.agents.research import CrossrefSearch, ResearchAgent
 from ai.agents.schemas import (
     AgentName,
     AgentPrincipal,
@@ -25,6 +28,7 @@ from ai.agents.schemas import (
     AgentRunResponse,
     AgentStreamEvent,
 )
+from ai.agents.university_services import UniversityServicesAgent
 from ai.graphs.agent_workflows import AgentGraphs, create_agent_graphs
 from ai.models.config import RAGModelSettings
 from ai.models.langchain import LangChainOllamaGenerator
@@ -152,6 +156,7 @@ class AgentService:
             "user_role": request.role,
             "allowed_course_ids": sorted(request.allowed_course_ids),
             "retry_count": 0,
+            "agent_retry_counts": {},
         }
 
     @staticmethod
@@ -159,7 +164,10 @@ class AgentService:
         thread_id = hashlib.sha256(
             f"{user_id}:{conversation_id}".encode()
         ).hexdigest()
-        return {"configurable": {"thread_id": thread_id}}
+        return {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 50,
+        }
 
     @staticmethod
     def _response(
@@ -167,12 +175,15 @@ class AgentService:
         state: AgentState,
     ) -> AgentRunResponse:
         outputs = state.get("agent_outputs", {})
-        knowledge_output = outputs.get(AgentName.KNOWLEDGE.value, {})
-        sources = (
-            knowledge_output.get("sources", [])
-            if AgentName.KNOWLEDGE in state["selected_agents"]
-            else []
-        )
+        sources: list[dict[str, object]] = []
+        for agent_name in state["selected_agents"]:
+            output = outputs.get(agent_name.value, {})
+            for key in ("sources", "papers", "documentation"):
+                items = output.get(key, [])
+                if isinstance(items, list):
+                    sources.extend(item for item in items if isinstance(item, dict))
+                    if items:
+                        break
         return AgentRunResponse(
             conversation_id=request.conversation_id,
             request_id=request.request_id,
@@ -209,10 +220,10 @@ class PostgresAgentEventStore:
         user_id: str,
         conversation_id: UUID,
     ) -> list[AgentStreamEvent]:
+        from app.models.agent_events import AgentExecutionEvent
         from sqlalchemy import select
 
         from ai.agents.schemas import AgentName
-        from app.models.agent_events import AgentExecutionEvent
 
         async with self.session_factory() as session:
             rows = (
@@ -278,6 +289,7 @@ def create_default_agent_service(
         model,
         concurrency_limit=concurrency_limit,
     )
+    official_email = os.getenv("CROSSREF_MAILTO")
     rag_service = RAGService(
         SentenceTransformerEmbedder(),
         reranker=BGEReranker(),
@@ -286,7 +298,27 @@ def create_default_agent_service(
     graphs = create_agent_graphs(
         KnowledgeAgent(rag_service, session_factory),
         LearningAgent(model, concurrency_limit=concurrency_limit),
+        additional_agents={
+            AgentName.RESEARCH: ResearchAgent(
+                model,
+                search=CrossrefSearch(mailto=official_email),
+                concurrency_limit=concurrency_limit,
+            ),
+            AgentName.CODING: CodingAgent(
+                model,
+                concurrency_limit=concurrency_limit,
+            ),
+            AgentName.PLANNING: PlanningAgent(
+                model,
+                concurrency_limit=concurrency_limit,
+            ),
+            AgentName.UNIVERSITY_SERVICES: UniversityServicesAgent(
+                model,
+                concurrency_limit=concurrency_limit,
+            ),
+        },
         checkpointer=checkpointer,
+        agent_timeout_seconds=float(os.getenv("AGENT_EXECUTION_TIMEOUT_SECONDS", "45")),
     )
     return AgentService(
         graphs,

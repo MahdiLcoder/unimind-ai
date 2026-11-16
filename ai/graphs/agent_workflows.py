@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from time import perf_counter
+from typing import Any, Protocol
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -18,6 +21,11 @@ from ai.state.agent import AgentState
 
 logger = logging.getLogger(__name__)
 _MAX_RETRIES = 1
+_DEFAULT_AGENT_TIMEOUT_SECONDS = 30.0
+
+
+class AgentExecutor(Protocol):
+    async def execute(self, state: AgentState) -> dict[str, object]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,11 +41,16 @@ def create_agent_graphs(
     knowledge_agent: KnowledgeAgent,
     learning_agent: LearningAgent,
     *,
+    additional_agents: Mapping[AgentName, AgentExecutor] | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
+    agent_timeout_seconds: float = _DEFAULT_AGENT_TIMEOUT_SECONDS,
 ) -> AgentGraphs:
+    if agent_timeout_seconds <= 0:
+        raise ValueError("agent_timeout_seconds must be positive")
     agents = {
         AgentName.KNOWLEDGE: knowledge_agent,
         AgentName.LEARNING: learning_agent,
+        **(additional_agents or {}),
     }
 
     def record_request(state: AgentState) -> dict[str, object]:
@@ -64,31 +77,44 @@ def create_agent_graphs(
 
     def force_agent(agent_name: AgentName):
         def set_route(state: AgentState) -> dict[str, object]:
-            decision = RoutingDecision(
-                intent=(
-                    Intent.KNOWLEDGE_QUESTION
-                    if agent_name == AgentName.KNOWLEDGE
-                    else Intent.LEARNING_ACTIVITY
+            return _routing_update(
+                state,
+                RoutingDecision(
+                    intent=(
+                        Intent.KNOWLEDGE_QUESTION
+                        if agent_name == AgentName.KNOWLEDGE
+                        else Intent.LEARNING_ACTIVITY
+                    ),
+                    selected_agents=(agent_name,),
+                    plan=(f"Run the {agent_name.value} workflow.",),
+                    parallel=False,
                 ),
-                selected_agents=(agent_name,),
-                plan=(f"Run the {agent_name.value} workflow.",),
-                parallel=False,
             )
-            return _routing_update(state, decision)
 
         return set_route
 
     async def execute_agent(state: AgentState) -> dict[str, object]:
         agent_name = state["current_agent"]
-        agent = agents[agent_name]
+        agent = agents.get(agent_name)
+        if agent is None:
+            raise RuntimeError(f"No implementation is registered for {agent_name.value}")
+        started = perf_counter()
         try:
-            result = await agent.execute(state)
-            message = (
-                "Retrieved and checked university evidence."
-                if agent_name == AgentName.KNOWLEDGE
-                else "Generated structured learning material."
+            result = await asyncio.wait_for(
+                agent.execute(state),
+                timeout=agent_timeout_seconds,
             )
-            event = _event(state, "agent_completed", message, agent_name)
+            message = f"Completed the {agent_name.value} task."
+            event = _event(
+                state,
+                "agent_completed",
+                message,
+                agent_name,
+                {
+                    "latency_ms": round((perf_counter() - started) * 1000, 2),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
             return {**result, "events": [event]}
         except Exception as exc:
             logger.exception(
@@ -109,6 +135,7 @@ def create_agent_graphs(
                         ),
                         "evidence_sufficient": False,
                         "error_code": error_code,
+                        "retryable": True,
                     }
                 },
                 "errors": [{"agent": agent_name.value, "code": error_code}],
@@ -118,7 +145,10 @@ def create_agent_graphs(
                         "agent_failed",
                         "The agent encountered an error.",
                         agent_name,
-                        {"error_code": error_code},
+                        {
+                            "error_code": error_code,
+                            "latency_ms": round((perf_counter() - started) * 1000, 2),
+                        },
                     )
                 ],
             }
@@ -126,31 +156,64 @@ def create_agent_graphs(
     def evaluate(state: AgentState) -> dict[str, object]:
         retry_agents: list[AgentName] = []
         outputs = state.get("agent_outputs", {})
-        for agent_name in state["selected_agents"]:
+        current_agents = state.get("agents_to_run", [])
+        for agent_name in current_agents:
             output = outputs.get(agent_name.value, {})
-            failed = bool(output.get("error_code"))
+            failed = not output or bool(output.get("error_code"))
             needs_more_evidence = (
-                agent_name == AgentName.KNOWLEDGE
+                agent_name in {AgentName.KNOWLEDGE, AgentName.UNIVERSITY_SERVICES}
                 and not output.get("evidence_sufficient", False)
+                and output.get("retryable", True)
             )
-            if failed or needs_more_evidence:
+            retry_count = state.get("agent_retry_counts", {}).get(agent_name.value, 0)
+            if (failed or needs_more_evidence) and retry_count < _MAX_RETRIES:
                 retry_agents.append(agent_name)
 
-        should_retry = bool(retry_agents) and state.get("retry_count", 0) < _MAX_RETRIES
-        if not should_retry:
-            return {"retry_requested": False}
+        should_retry = bool(retry_agents)
+        if should_retry:
+            retry_counts = dict(state.get("agent_retry_counts", {}))
+            for agent_name in retry_agents:
+                retry_counts[agent_name.value] = retry_counts.get(agent_name.value, 0) + 1
+            return {
+                "retry_count": state.get("retry_count", 0) + 1,
+                "agent_retry_counts": retry_counts,
+                "agents_to_run": retry_agents,
+                "retry_requested": True,
+                "stage_complete": False,
+                "events": [
+                    _event(
+                        state,
+                        "retry_requested",
+                        "Retrying an agent after an error or insufficient evidence.",
+                        metadata={"agents": [agent.value for agent in retry_agents]},
+                    )
+                ],
+            }
+
+        batches = state.get("execution_batches", [])
+        current_batch = state.get("batch_index", 0)
+        if batches and current_batch + 1 < len(batches):
+            next_batch = current_batch + 1
+            return {
+                "agents_to_run": batches[next_batch],
+                "batch_index": next_batch,
+                "retry_requested": False,
+                "stage_complete": False,
+                "events": [
+                    _event(
+                        state,
+                        "agent_batch_ready",
+                        "Dependencies completed; starting the next agent batch.",
+                        metadata={
+                            "agents": [agent.value for agent in batches[next_batch]],
+                            "batch_index": next_batch,
+                        },
+                    )
+                ],
+            }
         return {
-            "retry_count": state.get("retry_count", 0) + 1,
-            "agents_to_run": retry_agents,
-            "retry_requested": True,
-            "events": [
-                _event(
-                    state,
-                    "retry_requested",
-                    "Retrying an agent after an error or insufficient evidence.",
-                    metadata={"agents": [agent.value for agent in retry_agents]},
-                )
-            ],
+            "retry_requested": False,
+            "stage_complete": True,
         }
 
     def finalize(state: AgentState) -> dict[str, object]:
@@ -194,13 +257,22 @@ def create_agent_graphs(
         return [
             Send(
                 "agent_worker",
-                {**state, "current_agent": agent_name},
+                {
+                    **state,
+                    "current_agent": agent_name,
+                    "retry_count": state.get("agent_retry_counts", {}).get(
+                        agent_name.value,
+                        0,
+                    ),
+                },
             )
             for agent_name in state["agents_to_run"]
         ]
 
     def after_evaluation(state: AgentState) -> str:
-        return "retry" if state.get("retry_requested", False) else "finish"
+        if state.get("retry_requested", False):
+            return "dispatch"
+        return "finish" if state.get("stage_complete", False) else "dispatch"
 
     def base_builder() -> StateGraph:
         builder = StateGraph(AgentState)
@@ -213,7 +285,7 @@ def create_agent_graphs(
         builder.add_conditional_edges(
             "evaluate",
             after_evaluation,
-            {"retry": "dispatch", "finish": "finalize"},
+            {"dispatch": "dispatch", "finish": "finalize"},
         )
         builder.add_edge("finalize", END)
         return builder
@@ -255,11 +327,14 @@ def _routing_update(
     state: AgentState,
     decision: RoutingDecision,
 ) -> dict[str, object]:
+    batches = decision.execution_batches or (decision.selected_agents,)
     return {
         "detected_intent": decision.intent,
         "execution_plan": list(decision.plan),
         "selected_agents": list(decision.selected_agents),
-        "agents_to_run": list(decision.selected_agents),
+        "execution_batches": [list(batch) for batch in batches],
+        "batch_index": 0,
+        "agents_to_run": list(batches[0]),
         "events": [
             _event(
                 state,
@@ -272,6 +347,9 @@ def _routing_update(
                     ],
                     "plan": list(decision.plan),
                     "parallel": decision.parallel,
+                    "execution_batches": [
+                        [agent.value for agent in batch] for batch in batches
+                    ],
                 },
             )
         ],
