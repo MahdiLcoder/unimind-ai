@@ -54,6 +54,79 @@ const modes = [
 const modeSchema = z.enum(["tutor", "generate", "review", "debug", "challenge", "evaluate"]);
 type Mode = z.infer<typeof modeSchema>;
 
+const quickLanguages = ["Python", "TypeScript", "JavaScript", "C++", "Java", "Rust", "Go", "SQL"];
+
+const sampleTemplates = [
+  {
+    name: "LRU Cache",
+    lang: "Python",
+    code: `class LRUCache:
+    def __init__(self, capacity: int):
+        self.capacity = capacity
+        self.cache = {}
+
+    def get(self, key: int) -> int:
+        if key not in self.cache:
+            return -1
+        val = self.cache.pop(key)
+        self.cache[key] = val
+        return val
+
+    def put(self, key: int, value: int) -> None:
+        if key in self.cache:
+            self.cache.pop(key)
+        elif len(self.cache) >= self.capacity:
+            oldest = next(iter(self.cache))
+            del self.cache[oldest]
+        self.cache[key] = value
+
+lru = LRUCache(2)
+lru.put(1, 100)
+lru.put(2, 200)
+print("Get 1:", lru.get(1))
+lru.put(3, 300)
+print("Get 2 (evicted):", lru.get(2))
+print("Get 3:", lru.get(3))`,
+    question: "Analyze the time and space complexity of this LRU Cache and explain why pop and insert preserves recency order in Python 3.7+ dictionaries.",
+  },
+  {
+    name: "Binary Search",
+    lang: "Python",
+    code: `def binary_search(arr, target):
+    low, high = 0, len(arr) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1
+
+items = [3, 7, 12, 19, 24, 33, 45, 58, 67, 89]
+target = 33
+idx = binary_search(items, target)
+print(f"Target {target} located at index: {idx}")`,
+    question: "Explain the logarithmic O(log n) time complexity and discuss how to prevent integer overflow in (low + high) // 2 in languages with fixed-width integers.",
+  },
+  {
+    name: "Fibonacci Memoized",
+    lang: "Python",
+    code: `def fib(n, memo={}):
+    if n in memo:
+        return memo[n]
+    if n <= 1:
+        return n
+    memo[n] = fib(n - 1, memo) + fib(n - 2, memo)
+    return memo[n]
+
+for i in range(15):
+    print(f"fib({i}) = {fib(i)}")`,
+    question: "Explain dynamic programming memoization vs tabulation and how this reduces time complexity from O(2^n) to O(n).",
+  },
+];
+
 function message(cause: unknown): string {
   return cause instanceof Error ? cause.message : "The request could not be completed";
 }
@@ -179,12 +252,18 @@ export default function CodingContent() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
         <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
-              Dashboard
-            </Link>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Coding lab</h1>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
+                UniMind AI
+              </Link>
+              <span>/</span>
+              <span>ISI Kef</span>
+              <span>/</span>
+              <span>Coding Lab</span>
+            </div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Coding Lab &amp; Sandbox</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Learn, generate, review, and debug code with the Coding Agent.
+              Sandboxed execution and AI programming tutor built for ISI Kef computer science students.
             </p>
           </div>
           <UserButton />
@@ -235,6 +314,22 @@ export default function CodingContent() {
                 onChange={(event) => setLanguage(event.target.value)}
                 value={language}
               />
+              <div className="mt-2 flex flex-wrap gap-1">
+                {quickLanguages.map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => setLanguage(lang)}
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono transition-colors cursor-pointer ${
+                      language.toLowerCase() === lang.toLowerCase()
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="sm:col-span-2">
@@ -253,11 +348,28 @@ export default function CodingContent() {
             </div>
 
             <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1.5">
                 <label className="block text-xs font-medium text-foreground" htmlFor="coding-code">
                   Code or proposed solution (optional)
                 </label>
-                <span className="text-[11px] text-muted-foreground font-mono">Max 2,800 chars</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-medium mr-1">Load preset:</span>
+                  {sampleTemplates.map((template) => (
+                    <button
+                      key={template.name}
+                      type="button"
+                      onClick={() => {
+                        setLanguage(template.lang);
+                        setCode(template.code);
+                        setQuestion(template.question);
+                        toast.success(`Loaded "${template.name}" preset!`);
+                      }}
+                      className="rounded border border-border/70 bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground hover:bg-muted/30 cursor-pointer"
+                    >
+                      {template.name}
+                    </button>
+                  ))}
+                </div>
               </div>
               <Textarea
                 className="min-h-48 font-mono text-xs leading-relaxed bg-muted/20"

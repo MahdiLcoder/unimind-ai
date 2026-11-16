@@ -106,6 +106,7 @@ export default function CoursesContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [filterQuery, setFilterQuery] = useState("");
 
   const load = useCallback(async () => {
     const token = await getToken();
@@ -304,6 +305,16 @@ export default function CoursesContent() {
 
   const canManageCourses = role === "professor" || role === "administrator";
 
+  const displayedCourses = courses.filter((c) => {
+    if (!filterQuery.trim()) return true;
+    const q = filterQuery.toLowerCase();
+    return (
+      c.code.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q) ||
+      (c.description?.toLowerCase().includes(q) ?? false)
+    );
+  });
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
@@ -311,12 +322,18 @@ export default function CoursesContent() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
         <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
-              Dashboard
-            </Link>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Courses</h1>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
+                UniMind AI
+              </Link>
+              <span>/</span>
+              <span>ISI Kef</span>
+              <span>/</span>
+              <span>Courses</span>
+            </div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Courses &amp; Modules</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Course access controls course materials, enrollment, and academic work.
+              ISI Kef academic workspace enrollments, syllabus indexing, and course assignments.
             </p>
           </div>
           <UserButton />
@@ -371,8 +388,26 @@ export default function CoursesContent() {
                   />
                 )}
 
+                {courses.length > 0 && (
+                  <div className="relative mb-6">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter courses by code, title, or description…"
+                      value={filterQuery}
+                      onChange={(e) => setFilterQuery(e.target.value)}
+                      className="pl-9 text-xs"
+                    />
+                  </div>
+                )}
+
+                {courses.length > 0 && displayedCourses.length === 0 && (
+                  <p className="rounded-lg bg-muted/40 p-6 text-center text-xs text-muted-foreground border">
+                    No courses match &quot;{filterQuery}&quot;.
+                  </p>
+                )}
+
                 <div className="grid gap-5 sm:grid-cols-2">
-                  {courses.map((course) => (
+                  {displayedCourses.map((course) => (
                     <Card key={course.id} className="flex flex-col justify-between shadow-xs">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">

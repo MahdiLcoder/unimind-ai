@@ -76,7 +76,16 @@ function SiteHeaderContent() {
                 >
                   AI
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className="hidden sm:inline-flex text-[10px] font-medium border-border/70 text-muted-foreground px-1.5 py-0"
+                >
+                  ISI Kef
+                </Badge>
               </div>
+              <span className="text-[10px] text-muted-foreground hidden sm:block font-mono leading-none mt-0.5">
+                #AB-Mahdi
+              </span>
             </div>
           </Link>
 
@@ -172,8 +181,14 @@ function SiteHeaderContent() {
                   <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
                     <Eye className="size-4" />
                   </div>
-                  UniMind AI
+                  <span>UniMind AI</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                    ISI Kef
+                  </Badge>
                 </SheetTitle>
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  #AB-Mahdi · AI-Vision
+                </p>
               </SheetHeader>
               <nav
                 aria-label="Mobile Navigation"
@@ -264,7 +279,16 @@ export function SiteHeaderFallback() {
                 >
                   AI
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className="hidden sm:inline-flex text-[10px] font-medium border-border/70 text-muted-foreground px-1.5 py-0"
+                >
+                  ISI Kef
+                </Badge>
               </div>
+              <span className="text-[10px] text-muted-foreground hidden sm:block font-mono leading-none mt-0.5">
+                #AB-Mahdi
+              </span>
             </div>
           </Link>
 

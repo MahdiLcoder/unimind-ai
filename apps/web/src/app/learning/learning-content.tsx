@@ -347,14 +347,20 @@ export default function LearningContent() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
         <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
-              Dashboard
-            </Link>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
+                UniMind AI
+              </Link>
+              <span>/</span>
+              <span>ISI Kef</span>
+              <span>/</span>
+              <span>Learning</span>
+            </div>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-              Learning & planning
+              Learning &amp; Study Studio
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage deadlines, revision plans, and scored practice.
+              Adaptive revision plans, assignment deadlines, and practice quizzes for ISI Kef students.
             </p>
           </div>
           <UserButton />

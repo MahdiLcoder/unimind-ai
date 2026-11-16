@@ -13,8 +13,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "UniMind AI",
-  description: "Your intelligent university assistant",
+  title: "UniMind AI · ISI Kef",
+  description: "Intelligent university platform for ISI Kef",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

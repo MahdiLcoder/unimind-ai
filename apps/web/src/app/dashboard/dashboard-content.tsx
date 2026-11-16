@@ -204,6 +204,8 @@ export default function DashboardPage() {
                 UniMind AI
               </span>
               <span className="text-muted-foreground">/</span>
+              <span className="text-xs font-medium text-muted-foreground">ISI Kef</span>
+              <span className="text-muted-foreground">/</span>
               <span className="text-xs font-medium text-muted-foreground">Overview</span>
             </div>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">
@@ -282,6 +284,80 @@ export default function DashboardPage() {
               </CardContent>
             )}
           </Card>
+        </section>
+
+        {/* Quick Actions Launchpad */}
+        <section aria-labelledby="quick-actions-heading" className="mt-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 id="quick-actions-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Academic Launchpad
+            </h2>
+            <span className="text-xs text-muted-foreground">Direct shortcuts</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              {
+                title: "AI Workspace",
+                desc: "Chat with verified citations",
+                href: "/workspace",
+                icon: FolderKanban,
+                color: "text-primary",
+                bg: "bg-primary/10",
+              },
+              {
+                title: "Study Plans",
+                desc: "Adaptive schedules & quizzes",
+                href: "/learning",
+                icon: Sparkles,
+                color: "text-amber-500",
+                bg: "bg-amber-500/10",
+              },
+              {
+                title: "Coding Lab",
+                desc: "Sandboxed execution & tutor",
+                href: "/coding",
+                icon: Code2,
+                color: "text-emerald-500",
+                bg: "bg-emerald-500/10",
+              },
+              {
+                title: "Research Studio",
+                desc: "Crossref search & APA cite",
+                href: "/research",
+                icon: FileSearch,
+                color: "text-rose-500",
+                bg: "bg-rose-500/10",
+              },
+              {
+                title: "Courses",
+                desc: "Syllabi & assignments",
+                href: "/courses",
+                icon: BookOpen,
+                color: "text-blue-500",
+                bg: "bg-blue-500/10",
+              },
+            ].map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link
+                  key={action.title}
+                  href={action.href}
+                  className="group relative flex flex-col justify-between rounded-xl border border-border/70 bg-card p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className={`flex size-9 items-center justify-center rounded-lg ${action.bg} ${action.color} transition-transform group-hover:scale-105`}>
+                      <Icon className="size-4" />
+                    </div>
+                    <ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{action.title}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">{action.desc}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </section>
 
         {/* University Overview Metrics */}

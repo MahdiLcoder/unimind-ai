@@ -17,6 +17,9 @@ import {
   RefreshCw,
   FileCheck,
   AlertCircle,
+  Copy,
+  Check,
+  Eraser,
 } from "lucide-react";
 
 import { apiFetch, apiRequest } from "@/lib/api";
@@ -336,14 +339,18 @@ export default function WorkspaceContent() {
         {/* Workspace Title Header */}
         <header className="mb-8 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
-              UniMind AI
-            </Link>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
+                UniMind AI
+              </Link>
+              <span>/</span>
+              <span>ISI Kef</span>
+            </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
               AI workspace
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Private knowledge and multi-agent chat
+              Private knowledge and multi-agent chat for ISI Kef coursework
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -389,24 +396,66 @@ export default function WorkspaceContent() {
                     Answers use your private documents and include available citations.
                   </CardDescription>
                 </div>
-                {sending && (
-                  <Badge variant="secondary" className="animate-pulse text-[10px]">
-                    Multi-Agent Active
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {messages.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setMessages([]);
+                        setAgentEvents([]);
+                        conversationId.current = null;
+                        toast.info("Conversation cleared.");
+                      }}
+                      type="button"
+                    >
+                      <Eraser className="size-3.5" />
+                      Clear
+                    </Button>
+                  )}
+                  {sending && (
+                    <Badge variant="secondary" className="animate-pulse text-[10px]">
+                      Multi-Agent Active
+                    </Badge>
+                  )}
+                </div>
               </div>
             </CardHeader>
 
             <CardContent className="flex-1 space-y-4 overflow-y-auto p-5" aria-live="polite">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full min-h-[16rem] text-center p-6">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                    <Bot className="size-5" />
+                <div className="flex flex-col items-center justify-center h-full min-h-[18rem] text-center p-6">
+                  <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+                    <Sparkles className="size-6" />
                   </div>
-                  <h3 className="mt-3 text-sm font-semibold">Grounded AI Conversations</h3>
+                  <h3 className="text-base font-semibold text-foreground">Grounded AI Conversations</h3>
                   <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                    Upload a PDF or another supported document, then ask a question about its contents.
+                    Upload course syllabi, lecture slides, or notes to ask questions with ground-truth citations.
                   </p>
+                  <div className="mt-6 w-full max-w-md space-y-2 text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                      Suggested prompts
+                    </p>
+                    {[
+                      "Summarize key concepts from my documents",
+                      "Extract all assignment deadlines and exam dates",
+                      "Generate 5 practice review questions with solutions",
+                      "Explain the hardest concept using a simple analogy",
+                    ].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => {
+                          setPrompt(suggestion);
+                        }}
+                        className="w-full text-left rounded-lg border border-border/70 bg-card p-2.5 text-xs text-foreground transition-all hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                      >
+                        <span className="text-primary mr-1.5 font-bold">✦</span>
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -419,15 +468,32 @@ export default function WorkspaceContent() {
                   }`}
                   key={`${message.role}-${index}`}
                 >
-                  <div className="flex items-center gap-1.5 mb-2">
-                    {message.role === "user" ? (
-                      <User className="size-3.5 text-primary" />
-                    ) : (
-                      <Bot className="size-3.5 text-primary" />
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      {message.role === "user" ? (
+                        <User className="size-3.5 text-primary" />
+                      ) : (
+                        <Bot className="size-3.5 text-primary" />
+                      )}
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {message.role === "user" ? "You" : "UniMind"}
+                      </span>
+                    </div>
+                    {message.role === "assistant" && (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(message.content);
+                          toast.success("Answer copied to clipboard!");
+                        }}
+                        aria-label="Copy answer"
+                        type="button"
+                      >
+                        <Copy className="size-3" />
+                      </Button>
                     )}
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {message.role === "user" ? "You" : "UniMind"}
-                    </span>
                   </div>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                     {message.content}

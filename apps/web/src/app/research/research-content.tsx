@@ -192,14 +192,20 @@ export default function ResearchContent() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
         <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
-              Dashboard
-            </Link>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link className="font-semibold uppercase tracking-[0.16em] text-primary hover:underline" href="/dashboard">
+                UniMind AI
+              </Link>
+              <span>/</span>
+              <span>ISI Kef</span>
+              <span>/</span>
+              <span>Research</span>
+            </div>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-              Research studio
+              Research Studio &amp; Citations
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Discover and save Crossref papers, then request an evidence-grounded review.
+              Discover Crossref papers and synthesize evidence-grounded reviews for ISI Kef research projects.
             </p>
           </div>
           <UserButton />
@@ -243,6 +249,25 @@ export default function ResearchContent() {
             {busy ? "Working…" : "Search papers"}
           </Button>
         </form>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="font-medium mr-1">Popular research topics:</span>
+          {[
+            "Vision transformers",
+            "Retrieval-Augmented Generation",
+            "Graph neural networks",
+            "Self-supervised representation",
+          ].map((topic) => (
+            <button
+              key={topic}
+              type="button"
+              onClick={() => setQuery(topic)}
+              className="rounded-full border border-border/70 bg-card px-2.5 py-0.5 text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/30 transition-colors cursor-pointer"
+            >
+              {topic}
+            </button>
+          ))}
+        </div>
 
         {/* Research Papers List */}
         {papers.length > 0 && (
