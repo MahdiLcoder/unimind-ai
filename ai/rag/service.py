@@ -218,6 +218,17 @@ class RAGService:
             document_ids=document_ids,
             top_k=top_k,
         )
+        return await self.answer_from_retrieval(retrieval, started_at=started)
+
+    async def answer_from_retrieval(
+        self,
+        retrieval: RetrievalResult,
+        *,
+        started_at: float | None = None,
+    ) -> AnswerResult:
+        started = started_at if started_at is not None else time.perf_counter()
+        if self.generator is None:
+            raise RuntimeError("Configure a text generator before requesting answers")
         context = self.context_assembler.assemble(list(retrieval.chunks))
         system_prompt = (
             "You are UniMind AI, a university study assistant. Answer using only the "
