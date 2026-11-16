@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton, useAuth } from "@clerk/nextjs";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -43,7 +43,7 @@ const navItems: NavItem[] = [
   { name: "Admin", href: "/admin", icon: Shield },
 ];
 
-export function SiteHeader() {
+function SiteHeaderContent() {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
   const [open, setOpen] = useState(false);
@@ -238,5 +238,81 @@ export function SiteHeader() {
         </div>
       </div>
     </motion.header>
+  );
+}
+
+export function SiteHeaderFallback() {
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-6">
+          <Link
+            href="/"
+            className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+              <Eye className="size-5" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold tracking-tight text-foreground">
+                  UniMind
+                </span>
+                <Badge
+                  variant="secondary"
+                  className="px-1.5 py-0 text-[10px] font-semibold tracking-wide bg-primary/10 text-primary border-primary/20"
+                >
+                  AI
+                </Badge>
+              </div>
+            </div>
+          </Link>
+
+          <nav aria-label="Primary" className="hidden lg:flex lg:items-center lg:gap-0.5">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Icon className="size-4 text-muted-foreground" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex sm:items-center sm:gap-2">
+            <Link
+              href="/sign-in"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/sign-up"
+              className={buttonVariants({
+                size: "sm",
+                className: "shadow-sm shadow-primary/20",
+              })}
+            >
+              Get started
+            </Link>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export function SiteHeader() {
+  return (
+    <Suspense fallback={<SiteHeaderFallback />}>
+      <SiteHeaderContent />
+    </Suspense>
   );
 }

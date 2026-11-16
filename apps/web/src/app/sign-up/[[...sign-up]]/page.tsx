@@ -2,7 +2,7 @@ import { SignUp } from "@clerk/nextjs";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader, SiteHeaderFallback } from "@/components/site-header";
 
 function AuthSkeleton() {
   return (
@@ -29,7 +29,9 @@ export default function SignUpPage() {
         <div className="absolute top-1/4 left-1/2 h-[450px] w-[650px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
       </div>
 
-      <SiteHeader />
+      <Suspense fallback={<SiteHeaderFallback />}>
+        <SiteHeader />
+      </Suspense>
       <main className="relative flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
         <Suspense fallback={<AuthSkeleton />}>
           <SignUp path="/sign-up" signInUrl="/sign-in" forceRedirectUrl="/dashboard" />

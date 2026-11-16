@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
 import {
@@ -105,6 +106,12 @@ const stats = [
 ];
 
 export default function Home() {
+  const [year, setYear] = useState(2026);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear());
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <SiteHeader />
@@ -390,7 +397,7 @@ export default function Home() {
             <div>
               <p className="text-sm font-semibold text-foreground">UniMind AI</p>
               <p className="text-xs text-muted-foreground">
-                © {new Date().getFullYear()} Built for modern university workflows.
+                © {year} Built for modern university workflows.
               </p>
             </div>
           </div>
