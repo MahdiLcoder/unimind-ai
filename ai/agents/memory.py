@@ -22,8 +22,9 @@ class PostgresLearningMemoryStore:
         self.session_factory = session_factory
 
     async def get(self, user_id: str) -> LearningMemoryData:
-        from app.models.learning_memory import UserLearningMemory
         from sqlalchemy import select
+
+        from app.models.learning_memory import UserLearningMemory
 
         async with self.session_factory() as session:
             row = await session.scalar(
@@ -41,9 +42,10 @@ class PostgresLearningMemoryStore:
         user_id: str,
         memory: LearningMemoryData,
     ) -> LearningMemoryData:
-        from app.models.learning_memory import UserLearningMemory
         from sqlalchemy import func
         from sqlalchemy.dialects.postgresql import insert
+
+        from app.models.learning_memory import UserLearningMemory
 
         values = memory.model_dump(mode="json")
         statement = (
@@ -67,8 +69,9 @@ class PostgresLearningMemoryStore:
         return memory
 
     async def delete(self, user_id: str) -> None:
-        from app.models.learning_memory import UserLearningMemory
         from sqlalchemy import delete
+
+        from app.models.learning_memory import UserLearningMemory
 
         async with self.session_factory() as session, session.begin():
             await session.execute(

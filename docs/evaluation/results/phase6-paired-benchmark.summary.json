@@ -1,0 +1,53 @@
+{
+  "baseline": {
+    "estimated_cost_usd": null,
+    "failure_count": 0,
+    "failures": [],
+    "input_tokens": null,
+    "mean_citation_correctness": 0.0,
+    "mean_latency_ms": 30674.404279499868,
+    "mean_mrr": 0.0,
+    "mean_precision_at_k": 0.0,
+    "mean_ragas": {
+      "answer_relevancy": null,
+      "context_precision": null,
+      "context_recall": null,
+      "factual_correctness": null,
+      "faithfulness": null
+    },
+    "mean_recall_at_k": 0.0,
+    "mean_routing_accuracy": null,
+    "operational_task_success_rate": 0.0,
+    "output_tokens": null,
+    "ragas_failure_count": 0
+  },
+  "dataset_version": "placeholder-v0",
+  "embedding_model": "BAAI/bge-m3",
+  "generation_model": "qwen2.5:3b",
+  "proposed": {
+    "estimated_cost_usd": null,
+    "failure_count": 0,
+    "failures": [],
+    "input_tokens": null,
+    "mean_citation_correctness": 0.0,
+    "mean_latency_ms": 45091.10951150069,
+    "mean_mrr": 0.0,
+    "mean_precision_at_k": 0.0,
+    "mean_ragas": {
+      "answer_relevancy": null,
+      "context_precision": null,
+      "context_recall": null,
+      "factual_correctness": null,
+      "faithfulness": null
+    },
+    "mean_recall_at_k": 0.0,
+    "mean_routing_accuracy": 0.5,
+    "operational_task_success_rate": 0.0,
+    "output_tokens": null,
+    "ragas_failure_count": 0
+  },
+  "questions": 2,
+  "ragas_requested": false,
+  "reranker_enabled": true,
+  "top_k": 5
+}

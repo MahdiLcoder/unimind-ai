@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     clerk_authorized_parties: str = ""
     admin_clerk_user_ids: str = ""
     code_runner_url: str | None = None
+    api_rate_limit_enabled: bool | None = None
+    api_rate_limit_requests: int = Field(default=120, ge=1, le=100_000)
+    api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
 
     @property
     def sqlalchemy_database_url(self) -> str:
@@ -62,6 +65,12 @@ class Settings(BaseSettings):
             for user_id in self.admin_clerk_user_ids.split(",")
             if user_id.strip()
         )
+
+    @property
+    def rate_limit_enabled(self) -> bool:
+        if self.api_rate_limit_enabled is not None:
+            return self.api_rate_limit_enabled
+        return self.app_env.lower() == "production"
 
 
 @lru_cache

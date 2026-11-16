@@ -127,6 +127,15 @@ configured. Password recovery and MFA are managed by Clerk.
 
 ## Quality checks
 
+The current test and evaluation coverage, reproducible commands, measured
+results status, and known Phase 6 gaps are recorded in
+[Testing, evaluation, and security](docs/testing-evaluation-security.md).
+
+To run the paired direct-RAG/supervisor experiment after preparing and
+reviewing its academic question set, see the runbook for installing the
+optional Ragas evaluation dependencies and producing per-question JSONL/CSV,
+aggregate JSON, charts, and a Markdown report.
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm check

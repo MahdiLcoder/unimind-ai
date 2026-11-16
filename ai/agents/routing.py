@@ -87,7 +87,9 @@ def route_request(message: str) -> RoutingDecision:
         AgentName.KNOWLEDGE: "Retrieve permitted university material and validate citations.",
         AgentName.LEARNING: "Generate the requested learning activity from available context.",
         AgentName.RESEARCH: "Search academic metadata and synthesize citable research evidence.",
-        AgentName.CODING: "Generate, explain, review, or debug code without executing it in the API.",
+        AgentName.CODING: (
+            "Generate, explain, review, or debug code without executing it in the API."
+        ),
         AgentName.PLANNING: "Create a schedule using stated priorities, deadlines, and capacity.",
         AgentName.UNIVERSITY_SERVICES: "Answer only from configured verified official sources.",
     }

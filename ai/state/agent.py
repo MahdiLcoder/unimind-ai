@@ -40,6 +40,10 @@ class AgentState(TypedDict, total=False):
     events: Annotated[list[dict[str, object]], operator_add]
     retry_count: int
     agent_retry_counts: dict[str, int]
+    requires_human_approval: bool
+    human_approval_status: str | None
+    sensitive_action_request: dict[str, object] | None
+    sensitive_action_result: dict[str, object] | None
     final_response: str
 
 

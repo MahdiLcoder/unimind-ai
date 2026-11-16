@@ -43,3 +43,8 @@ htmlcov/
 # Temporary files
 tmp/
 temp/
+
+# Playwright artifacts
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/

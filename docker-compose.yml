@@ -36,6 +36,8 @@ services:
     restart: unless-stopped
     mem_limit: 8g
     cpus: 6
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -78,6 +80,9 @@ services:
       CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-http://localhost:3000}
       ADMIN_CLERK_USER_IDS: ${ADMIN_CLERK_USER_IDS:-}
       AGENT_EXECUTION_TIMEOUT_SECONDS: ${AGENT_EXECUTION_TIMEOUT_SECONDS:-120}
+      API_RATE_LIMIT_ENABLED: ${API_RATE_LIMIT_ENABLED:-true}
+      API_RATE_LIMIT_REQUESTS: ${API_RATE_LIMIT_REQUESTS:-120}
+      API_RATE_LIMIT_WINDOW_SECONDS: ${API_RATE_LIMIT_WINDOW_SECONDS:-60}
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       HF_RERANKER_ENABLED: ${HF_RERANKER_ENABLED:-true}

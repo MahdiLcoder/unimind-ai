@@ -18,10 +18,13 @@ DOCUMENT_ID = UUID("f829c03c-d1ae-4a2c-a1ed-4e98fd5a0f5a")
 class FakeRAGService:
     def __init__(self) -> None:
         self.ingest_args: dict[str, object] | None = None
+        self.ingest_error: ValueError | None = None
         self.retrieve_args: dict[str, object] | None = None
 
     async def ingest(self, session: object, **kwargs: object) -> UUID:
         self.ingest_args = {"session": session, **kwargs}
+        if self.ingest_error is not None:
+            raise self.ingest_error
         return DOCUMENT_ID
 
     async def retrieve(self, session: object, query: str, **kwargs: object) -> RetrievalResult:
@@ -156,3 +159,33 @@ def test_document_upload_rejects_missing_authentication() -> None:
         )
 
     assert response.status_code == 401
+
+
+def test_upload_enforces_streamed_size_limit(authenticated_document_api, monkeypatch) -> None:
+    import app.api.documents as document_routes
+
+    client, rag_service, _session = authenticated_document_api
+    monkeypatch.setattr(document_routes, "MAX_DOCUMENT_BYTES", 3)
+
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("lecture.txt", b"four", "text/plain")},
+    )
+
+    assert response.status_code == 413
+    assert rag_service.ingest_args is None
+
+
+def test_upload_maps_extractor_validation_to_client_error(
+    authenticated_document_api,
+) -> None:
+    client, rag_service, _session = authenticated_document_api
+    rag_service.ingest_error = ValueError("Unsupported document type")
+
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("lecture.exe", b"executable", "application/octet-stream")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Unsupported document type"

@@ -155,9 +155,34 @@ def create_agent_graphs(
             }
 
     def evaluate(state: AgentState) -> dict[str, object]:
-        retry_agents: list[AgentName] = []
         outputs = state.get("agent_outputs", {})
         current_agents = state.get("agents_to_run", [])
+
+        # Check if an agent flagged a sensitive action requiring human approval
+        for agent_name in current_agents:
+            output = outputs.get(agent_name.value, {})
+            if output.get("requires_human_approval"):
+                req = output.get("sensitive_action_request") or {
+                    "action": f"{agent_name.value}_action",
+                    "agent": agent_name.value,
+                }
+                return {
+                    "requires_human_approval": True,
+                    "sensitive_action_request": req,
+                    "stage_complete": True,
+                    "retry_requested": False,
+                    "events": [
+                        _event(
+                            state,
+                            "human_approval_requested",
+                            f"Action by {agent_name.value} requires human confirmation.",
+                            agent_name,
+                            metadata=req,
+                        )
+                    ],
+                }
+
+        retry_agents: list[AgentName] = []
         for agent_name in current_agents:
             output = outputs.get(agent_name.value, {})
             failed = not output or bool(output.get("error_code"))

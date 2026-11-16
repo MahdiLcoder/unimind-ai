@@ -22,6 +22,7 @@ from app.api import (
 from app.core.cache import redis_client
 from app.core.config import settings
 from app.core.database import engine
+from app.core.rate_limit import RedisRateLimitMiddleware
 
 
 @asynccontextmanager
@@ -49,6 +50,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RedisRateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
