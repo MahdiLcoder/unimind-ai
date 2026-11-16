@@ -4,7 +4,31 @@ import { UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
+import { toast } from "sonner";
+import {
+  BookOpen,
+  PlusCircle,
+  Search,
+  Users,
+  Layers,
+  ArrowRight,
+  TrendingUp,
+} from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/empty-state";
 
 const profileSchema = z.object({
   clerk_user_id: z.string(),
@@ -102,7 +126,11 @@ export default function CoursesContent() {
     void Promise.resolve()
       .then(load)
       .catch((cause: unknown) => {
-        if (active) setError(errorMessage(cause));
+        if (active) {
+          const err = errorMessage(cause);
+          setError(err);
+          toast.error(err);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -127,11 +155,14 @@ export default function CoursesContent() {
       const result = await apiRequest(
         `/api/v1/courses/catalog?${query}`,
         z.array(courseSchema),
-        { accessToken: token },
+        { accessToken: token }
       );
       setCatalog(result);
+      toast.info(`Found ${result.length} courses`);
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -148,9 +179,12 @@ export default function CoursesContent() {
       });
       setWorkspaceName("");
       setNotice("Workspace created.");
+      toast.success("Workspace created successfully.");
       await load();
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -168,14 +202,17 @@ export default function CoursesContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code: courseCode, name: courseName }),
           accessToken: token,
-        },
+        }
       );
       setCourseCode("");
       setCourseName("");
       setNotice("Course created.");
+      toast.success("Course created successfully.");
       await load();
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -186,12 +223,16 @@ export default function CoursesContent() {
       await apiRequest(
         `/api/v1/courses/${course.id}/enrollment`,
         enrollmentSchema,
-        { method: "POST", accessToken: token },
+        { method: "POST", accessToken: token }
       );
-      setNotice(`Enrolled in ${course.code}.`);
+      const msg = `Enrolled in ${course.code}.`;
+      setNotice(msg);
+      toast.success(msg);
       await load();
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -202,14 +243,17 @@ export default function CoursesContent() {
       const roster = await apiRequest(
         `/api/v1/courses/${course.id}/enrollments`,
         z.array(enrollmentSchema),
-        { accessToken: token },
+        { accessToken: token }
       );
       setRosters((current) => ({
         ...current,
         [course.id]: roster.map((enrollment) => enrollment.student_id),
       }));
+      toast.info(`Loaded roster for ${course.code}`);
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -220,11 +264,14 @@ export default function CoursesContent() {
       const overview = await apiRequest(
         `/api/v1/courses/${course.id}/learning-overview`,
         overviewSchema,
-        { accessToken: token },
+        { accessToken: token }
       );
       setOverviews((current) => ({ ...current, [course.id]: overview }));
+      toast.info(`Loaded analytics for ${course.code}`);
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -245,191 +292,385 @@ export default function CoursesContent() {
       });
       setAssignmentTitles((current) => ({ ...current, [course.id]: "" }));
       setAssignmentDues((current) => ({ ...current, [course.id]: "" }));
-      setNotice(`Assignment created for ${course.code}.`);
+      const msg = `Assignment created for ${course.code}.`;
+      setNotice(msg);
+      toast.success(msg);
     } catch (cause) {
-      setError(errorMessage(cause));
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
   const canManageCourses = role === "professor" || role === "administrator";
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-      <header className="flex items-center justify-between border-b pb-6">
-        <div>
-          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/dashboard">
-            Dashboard
-          </Link>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Courses</h1>
-          <p className="mt-2 text-muted-foreground">
-            Course access controls course materials, enrollment, and academic work.
-          </p>
-        </div>
-        <UserButton />
-      </header>
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader />
 
-      {error && <p className="mt-6 rounded-lg border border-destructive/40 p-4 text-sm" role="alert">{error}</p>}
-      {notice && <p className="mt-6 rounded-lg border p-4 text-sm" role="status">{notice}</p>}
-      {loading && <p className="mt-6" role="status">Loading your courses…</p>}
-
-      {canManageCourses && (
-        <section className="mt-8 grid gap-6 md:grid-cols-2">
-          <form className="space-y-3 rounded-2xl border bg-card p-6" onSubmit={createWorkspace}>
-            <h2 className="text-lg font-semibold">Create a workspace</h2>
-            <label className="block text-sm" htmlFor="workspace-name">Workspace name</label>
-            <input
-              className="h-10 w-full rounded-md border bg-background px-3"
-              id="workspace-name"
-              maxLength={160}
-              minLength={1}
-              onChange={(event) => setWorkspaceName(event.target.value)}
-              required
-              value={workspaceName}
-            />
-            <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground" type="submit">
-              Create workspace
-            </button>
-          </form>
-
-          <form className="space-y-3 rounded-2xl border bg-card p-6" onSubmit={createCourse}>
-            <h2 className="text-lg font-semibold">Add a course</h2>
-            <label className="block text-sm" htmlFor="course-workspace">Workspace</label>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3"
-              id="course-workspace"
-              onChange={(event) => setCourseWorkspace(event.target.value)}
-              required
-              value={courseWorkspace}
-            >
-              <option value="">Select workspace</option>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-              ))}
-            </select>
-            <label className="block text-sm" htmlFor="course-code">Course code</label>
-            <input
-              className="h-10 w-full rounded-md border bg-background px-3"
-              id="course-code"
-              maxLength={32}
-              onChange={(event) => setCourseCode(event.target.value)}
-              required
-              value={courseCode}
-            />
-            <label className="block text-sm" htmlFor="course-name">Course name</label>
-            <input
-              className="h-10 w-full rounded-md border bg-background px-3"
-              id="course-name"
-              maxLength={160}
-              onChange={(event) => setCourseName(event.target.value)}
-              required
-              value={courseName}
-            />
-            <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground" type="submit">
-              Create course
-            </button>
-          </form>
-        </section>
-      )}
-
-      <section className="mt-8">
-        <h2 className="text-xl font-semibold">{canManageCourses ? "Your courses" : "Enrolled courses"}</h2>
-        {!loading && courses.length === 0 && (
-          <p className="mt-3 rounded-xl border p-5 text-sm text-muted-foreground">
-            No courses are linked to your account yet.
-          </p>
-        )}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {courses.map((course) => (
-            <article className="rounded-2xl border bg-card p-5" key={course.id}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-primary">{course.code}</p>
-              <h3 className="mt-2 font-semibold">{course.name}</h3>
-              {course.description && <p className="mt-2 text-sm text-muted-foreground">{course.description}</p>}
-              <Link className="mt-4 inline-block text-sm underline" href={`/workspace?course=${encodeURIComponent(course.id)}`}>
-                Open course workspace
-              </Link>
-              {canManageCourses && (
-                <div className="mt-4">
-                  <form className="mb-4 grid gap-2 rounded-lg border p-3" onSubmit={(event) => void createAssignment(event, course)}>
-                    <h4 className="text-sm font-semibold">Create a course assignment</h4>
-                    <label className="sr-only" htmlFor={`assignment-title-${course.id}`}>Assignment title for {course.code}</label>
-                    <input
-                      className="h-9 rounded-md border bg-background px-2 text-sm"
-                      id={`assignment-title-${course.id}`}
-                      maxLength={200}
-                      onChange={(event) => setAssignmentTitles((current) => ({ ...current, [course.id]: event.target.value }))}
-                      placeholder="Assignment title"
-                      required
-                      value={assignmentTitles[course.id] ?? ""}
-                    />
-                    <label className="text-xs text-muted-foreground" htmlFor={`assignment-due-${course.id}`}>Due date (optional)</label>
-                    <input
-                      className="h-9 rounded-md border bg-background px-2 text-sm"
-                      id={`assignment-due-${course.id}`}
-                      onChange={(event) => setAssignmentDues((current) => ({ ...current, [course.id]: event.target.value }))}
-                      type="datetime-local"
-                      value={assignmentDues[course.id] ?? ""}
-                    />
-                    <button className="h-9 rounded-md border px-3 text-sm hover:bg-muted" type="submit">Assign to enrolled students</button>
-                  </form>
-                  <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={() => void showRoster(course)} type="button">
-                    View enrolled students
-                  </button>
-                  <button className="ml-2 rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={() => void showOverview(course)} type="button">
-                    Learning overview
-                  </button>
-                  {overviews[course.id] && (
-                    <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3">
-                      <div><dt className="text-muted-foreground">Active students</dt><dd className="font-medium">{overviews[course.id].active_students}</dd></div>
-                      <div><dt className="text-muted-foreground">Assignments</dt><dd className="font-medium">{overviews[course.id].assignments}</dd></div>
-                      <div><dt className="text-muted-foreground">Completions</dt><dd className="font-medium">{overviews[course.id].assignment_completions}</dd></div>
-                      <div><dt className="text-muted-foreground">Quiz attempts</dt><dd className="font-medium">{overviews[course.id].quiz_attempts}</dd></div>
-                      <div><dt className="text-muted-foreground">Average quiz score</dt><dd className="font-medium">{overviews[course.id].average_quiz_score_percent == null ? "—" : `${Math.round(overviews[course.id].average_quiz_score_percent ?? 0)}%`}</dd></div>
-                    </dl>
-                  )}
-                  {rosters[course.id] && (
-                    <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                      {rosters[course.id].map((studentId) => <li key={studentId}>{studentId}</li>)}
-                      {rosters[course.id].length === 0 && <li>No active enrollments.</li>}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {role === "student" && (
-        <section className="mt-10 border-t pt-8">
-          <h2 className="text-xl font-semibold">Find a course</h2>
-          <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={searchCatalog}>
-            <label className="sr-only" htmlFor="catalog-search">Search by course name or code</label>
-            <input
-              className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3"
-              id="catalog-search"
-              minLength={2}
-              onChange={(event) => setCatalogQuery(event.target.value)}
-              placeholder="Search course name or code"
-              required
-              value={catalogQuery}
-            />
-            <button className="h-10 rounded-md border px-4 hover:bg-muted" type="submit">Search</button>
-          </form>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {catalog.map((course) => (
-              <article className="flex items-center justify-between gap-4 rounded-xl border p-4" key={course.id}>
-                <div>
-                  <p className="text-xs font-semibold text-primary">{course.code}</p>
-                  <h3 className="mt-1 font-medium">{course.name}</h3>
-                </div>
-                <button className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground" onClick={() => void enroll(course)} type="button">
-                  Enroll
-                </button>
-              </article>
-            ))}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
+        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
+              Dashboard
+            </Link>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Courses</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Course access controls course materials, enrollment, and academic work.
+            </p>
           </div>
-        </section>
-      )}
-    </main>
+          <UserButton />
+        </header>
+
+        {error && (
+          <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="status">
+            {notice}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="mt-8 space-y-4" role="status">
+            <p className="sr-only">Loading your courses…</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Skeleton className="h-44 w-full rounded-2xl" />
+              <Skeleton className="h-44 w-full rounded-2xl" />
+            </div>
+          </div>
+        ) : (
+          <Tabs defaultValue="courses" className="mt-8">
+            <TabsList className="h-9">
+              <TabsTrigger value="courses">
+                {canManageCourses ? "Your courses" : "Enrolled courses"}
+              </TabsTrigger>
+              {role === "student" && <TabsTrigger value="catalog">Browse Catalog</TabsTrigger>}
+              {canManageCourses && <TabsTrigger value="manage">Manage Workspaces & Courses</TabsTrigger>}
+            </TabsList>
+
+            {/* Courses Tab */}
+            <TabsContent value="courses" className="mt-6">
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-foreground">
+                    {canManageCourses ? "Your courses" : "Enrolled courses"}
+                  </h2>
+                  <Badge variant="secondary">
+                    {courses.length} {courses.length === 1 ? "Course" : "Courses"}
+                  </Badge>
+                </div>
+
+                {courses.length === 0 && (
+                  <EmptyState
+                    icon={BookOpen}
+                    title="No courses yet"
+                    description="No courses are linked to your account yet. Browse the catalog to enroll."
+                  />
+                )}
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {courses.map((course) => (
+                    <Card key={course.id} className="flex flex-col justify-between shadow-xs">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {course.code}
+                          </Badge>
+                          <Badge variant="secondary" className="text-[10px]">
+                            Active
+                          </Badge>
+                        </div>
+                        <CardTitle className="mt-2 text-lg font-semibold">{course.name}</CardTitle>
+                        {course.description && (
+                          <CardDescription className="text-xs leading-relaxed">
+                            {course.description}
+                          </CardDescription>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <Link
+                          className={buttonVariants({ variant: "outline", size: "sm", className: "w-full justify-between" })}
+                          href={`/workspace?course=${encodeURIComponent(course.id)}`}
+                        >
+                          <span>Open course workspace</span>
+                          <ArrowRight className="size-3.5" />
+                        </Link>
+
+                        {canManageCourses && (
+                          <div className="border-t pt-4 space-y-3">
+                            <form
+                              className="grid gap-2 rounded-lg border bg-muted/20 p-3"
+                              onSubmit={(event) => void createAssignment(event, course)}
+                            >
+                              <h4 className="text-xs font-semibold text-foreground">Create a course assignment</h4>
+                              <label className="sr-only" htmlFor={`assignment-title-${course.id}`}>
+                                Assignment title for {course.code}
+                              </label>
+                              <Input
+                                className="h-8 text-xs"
+                                id={`assignment-title-${course.id}`}
+                                maxLength={200}
+                                onChange={(event) =>
+                                  setAssignmentTitles((current) => ({
+                                    ...current,
+                                    [course.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Assignment title"
+                                required
+                                value={assignmentTitles[course.id] ?? ""}
+                              />
+                              <label
+                                className="text-[11px] text-muted-foreground"
+                                htmlFor={`assignment-due-${course.id}`}
+                              >
+                                Due date (optional)
+                              </label>
+                              <Input
+                                className="h-8 text-xs"
+                                id={`assignment-due-${course.id}`}
+                                onChange={(event) =>
+                                  setAssignmentDues((current) => ({
+                                    ...current,
+                                    [course.id]: event.target.value,
+                                  }))
+                                }
+                                type="datetime-local"
+                                value={assignmentDues[course.id] ?? ""}
+                              />
+                              <Button size="xs" variant="secondary" type="submit">
+                                Assign to enrolled students
+                              </Button>
+                            </form>
+
+                            <div className="flex gap-2">
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => void showRoster(course)}
+                                type="button"
+                              >
+                                <Users className="size-3 mr-1" />
+                                View enrolled students
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => void showOverview(course)}
+                                type="button"
+                              >
+                                <TrendingUp className="size-3 mr-1" />
+                                Learning overview
+                              </Button>
+                            </div>
+
+                            {overviews[course.id] && (
+                              <dl className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/10 p-3 text-xs sm:grid-cols-3">
+                                <div>
+                                  <dt className="text-muted-foreground">Active students</dt>
+                                  <dd className="font-semibold text-foreground">{overviews[course.id].active_students}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Assignments</dt>
+                                  <dd className="font-semibold text-foreground">{overviews[course.id].assignments}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Completions</dt>
+                                  <dd className="font-semibold text-foreground">{overviews[course.id].assignment_completions}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Quiz attempts</dt>
+                                  <dd className="font-semibold text-foreground">{overviews[course.id].quiz_attempts}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Average quiz score</dt>
+                                  <dd className="font-semibold text-foreground">
+                                    {overviews[course.id].average_quiz_score_percent == null
+                                      ? "—"
+                                      : `${Math.round(overviews[course.id].average_quiz_score_percent ?? 0)}%`}
+                                  </dd>
+                                </div>
+                              </dl>
+                            )}
+
+                            {rosters[course.id] && (
+                              <ul className="space-y-1 text-xs text-muted-foreground rounded-lg border p-3">
+                                <li className="font-semibold text-foreground mb-1">Roster:</li>
+                                {rosters[course.id].map((studentId) => (
+                                  <li key={studentId} className="font-mono text-[11px]">{studentId}</li>
+                                ))}
+                                {rosters[course.id].length === 0 && <li>No active enrollments.</li>}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            </TabsContent>
+
+            {/* Catalog Search Tab */}
+            {role === "student" && (
+              <TabsContent value="catalog" className="mt-6">
+                <Card className="p-6">
+                  <h2 className="text-xl font-semibold">Find a course</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Search the university academic catalog and enroll instantly.
+                  </p>
+                  <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={searchCatalog}>
+                    <label className="sr-only" htmlFor="catalog-search">
+                      Search by course name or code
+                    </label>
+                    <Input
+                      className="min-w-0 flex-1 text-sm"
+                      id="catalog-search"
+                      minLength={2}
+                      onChange={(event) => setCatalogQuery(event.target.value)}
+                      placeholder="Search course name or code"
+                      required
+                      value={catalogQuery}
+                    />
+                    <Button type="submit" className="gap-1.5 shrink-0">
+                      <Search className="size-4" />
+                      Search
+                    </Button>
+                  </form>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    {catalog.map((course) => (
+                      <Card key={course.id} className="p-4 flex items-center justify-between">
+                        <div>
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {course.code}
+                          </Badge>
+                          <h3 className="mt-1 font-medium text-sm text-foreground">{course.name}</h3>
+                        </div>
+                        <Button size="sm" onClick={() => void enroll(course)} type="button">
+                          Enroll
+                        </Button>
+                      </Card>
+                    ))}
+                    {catalog.length === 0 && catalogQuery && (
+                      <div className="col-span-full">
+                        <EmptyState
+                          icon={Search}
+                          title="No courses matched"
+                          description="Try another course keyword or code prefix."
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </TabsContent>
+            )}
+
+            {/* Professor / Admin Management Tab */}
+            {canManageCourses && (
+              <TabsContent value="manage" className="mt-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <Card className="p-6">
+                    <form className="space-y-4" onSubmit={createWorkspace}>
+                      <div>
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                          <Layers className="size-4 text-primary" />
+                          Create a workspace
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Group related courses and knowledge documents.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5" htmlFor="workspace-name">
+                          Workspace name
+                        </label>
+                        <Input
+                          id="workspace-name"
+                          maxLength={160}
+                          minLength={1}
+                          onChange={(event) => setWorkspaceName(event.target.value)}
+                          required
+                          value={workspaceName}
+                          placeholder="e.g. Department of Computer Science"
+                        />
+                      </div>
+                      <Button type="submit" className="w-full">
+                        Create workspace
+                      </Button>
+                    </form>
+                  </Card>
+
+                  <Card className="p-6">
+                    <form className="space-y-4" onSubmit={createCourse}>
+                      <div>
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                          <PlusCircle className="size-4 text-primary" />
+                          Add a course
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Create an official course code and title.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5" htmlFor="course-workspace">
+                          Workspace
+                        </label>
+                        <select
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          id="course-workspace"
+                          onChange={(event) => setCourseWorkspace(event.target.value)}
+                          required
+                          value={courseWorkspace}
+                        >
+                          <option value="">Select workspace</option>
+                          {workspaces.map((workspace) => (
+                            <option key={workspace.id} value={workspace.id}>
+                              {workspace.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5" htmlFor="course-code">
+                          Course code
+                        </label>
+                        <Input
+                          id="course-code"
+                          maxLength={32}
+                          onChange={(event) => setCourseCode(event.target.value)}
+                          placeholder="e.g. CS-301"
+                          required
+                          value={courseCode}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5" htmlFor="course-name">
+                          Course name
+                        </label>
+                        <Input
+                          id="course-name"
+                          maxLength={160}
+                          onChange={(event) => setCourseName(event.target.value)}
+                          placeholder="e.g. Algorithms & Complexity"
+                          required
+                          value={courseName}
+                        />
+                      </div>
+                      <Button type="submit" className="w-full">
+                        Create course
+                      </Button>
+                    </form>
+                  </Card>
+                </div>
+              </TabsContent>
+            )}
+          </Tabs>
+        )}
+      </main>
+    </div>
   );
 }

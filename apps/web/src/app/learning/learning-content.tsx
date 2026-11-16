@@ -4,7 +4,32 @@ import { UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
+import { toast } from "sonner";
+import {
+  Sparkles,
+  Calendar,
+  CheckCircle2,
+  Trash2,
+  BrainCircuit,
+  Clock,
+  Play,
+  Award,
+  ListTodo,
+} from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardDescription,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/empty-state";
 
 const taskSchema = z.object({
   id: z.string().uuid(),
@@ -26,14 +51,16 @@ const studyPlanSchema = z.object({
   summary: z.string().nullable(),
   starts_on: z.string().nullable(),
   ends_on: z.string().nullable(),
-  schedule: z.array(z.object({
-    day: z.string(),
-    topic: z.string(),
-    duration_minutes: z.number(),
-    course_id: z.string().nullable(),
-    priority: z.string().nullable(),
-    rationale: z.string().nullable(),
-  })),
+  schedule: z.array(
+    z.object({
+      day: z.string(),
+      topic: z.string(),
+      duration_minutes: z.number(),
+      course_id: z.string().nullable(),
+      priority: z.string().nullable(),
+      rationale: z.string().nullable(),
+    })
+  ),
   status: z.enum(["active", "completed", "archived"]),
   created_at: z.string(),
   updated_at: z.string(),
@@ -61,14 +88,16 @@ const quizAttemptSchema = z.object({
   score: z.number(),
   total_points: z.number(),
   submitted_at: z.string(),
-  feedback: z.array(z.object({
-    question_id: z.string().uuid(),
-    correct: z.boolean(),
-    answer: z.string().nullable(),
-    explanation: z.string().nullable(),
-    earned_points: z.number(),
-    total_points: z.number(),
-  })),
+  feedback: z.array(
+    z.object({
+      question_id: z.string().uuid(),
+      correct: z.boolean(),
+      answer: z.string().nullable(),
+      explanation: z.string().nullable(),
+      earned_points: z.number(),
+      total_points: z.number(),
+    })
+  ),
 });
 const userProfileSchema = z.object({
   role: z.enum(["student", "professor", "administrator"]),
@@ -143,7 +172,11 @@ export default function LearningContent() {
     void Promise.resolve()
       .then(load)
       .catch((cause: unknown) => {
-        if (active) setError(message(cause));
+        if (active) {
+          const err = message(cause);
+          setError(err);
+          toast.error(err);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -170,9 +203,12 @@ export default function LearningContent() {
       setTaskTitle("");
       setTaskDue("");
       setNotice("Task created.");
+      toast.success("Task created.");
       await load();
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -186,9 +222,12 @@ export default function LearningContent() {
         body: JSON.stringify({ status }),
         accessToken,
       });
+      toast.success(`Task marked as ${status}`);
       await load();
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -196,14 +235,17 @@ export default function LearningContent() {
     setError(null);
     try {
       const accessToken = await token();
-      const response = await apiFetch(
-        `/api/v1/tasks/${task.id}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } },
-      );
+      const response = await apiFetch(`/api/v1/tasks/${task.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!response.ok) throw new Error(`Could not delete task (${response.status})`);
+      toast.success("Task deleted");
       await load();
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -231,9 +273,12 @@ export default function LearningContent() {
       setPlanEnd("");
       setPlanningContext("");
       setNotice("AI study plan generated and saved.");
+      toast.success("AI study plan generated and saved.");
       await load();
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -261,9 +306,12 @@ export default function LearningContent() {
       setAnswers({});
       setQuizTopic("");
       setNotice("Quiz generated and saved.");
+      toast.success("Quiz generated and saved.");
       await load();
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
@@ -281,186 +329,557 @@ export default function LearningContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ answers }),
           accessToken,
-        },
+        }
       );
       setAttempt(result);
+      toast.success(`Quiz completed! Score: ${result.score} / ${result.total_points}`);
     } catch (cause) {
-      setError(message(cause));
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
     }
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-      <header className="flex items-center justify-between border-b pb-6">
-        <div>
-          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/dashboard">Dashboard</Link>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Learning & planning</h1>
-          <p className="mt-2 text-muted-foreground">Manage deadlines, revision plans, and scored practice.</p>
-        </div>
-        <UserButton />
-      </header>
+    <div className="flex min-h-screen flex-col bg-background">
+      <SiteHeader />
 
-      {error && <p className="mt-6 rounded-lg border border-destructive/40 p-4 text-sm" role="alert">{error}</p>}
-      {notice && <p className="mt-6 rounded-lg border p-4 text-sm" role="status">{notice}</p>}
-      {loading && <p className="mt-6" role="status">Loading your learning data…</p>}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
+        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link className="text-xs font-semibold uppercase tracking-[0.16em] text-primary" href="/dashboard">
+              Dashboard
+            </Link>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+              Learning & planning
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage deadlines, revision plans, and scored practice.
+            </p>
+          </div>
+          <UserButton />
+        </header>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <section>
-          <h2 className="text-xl font-semibold">Academic planner</h2>
-          <form className="mt-4 grid gap-3 rounded-xl border p-5 sm:grid-cols-2" onSubmit={createTask}>
-            <label className="text-sm sm:col-span-2" htmlFor="task-title">Task or assignment</label>
-            <input className="h-10 rounded-md border bg-background px-3 sm:col-span-2" id="task-title" maxLength={200} onChange={(event) => setTaskTitle(event.target.value)} required value={taskTitle} />
-            <label className="text-sm" htmlFor="task-due">Due date</label>
-            <input className="h-10 rounded-md border bg-background px-3" id="task-due" onChange={(event) => setTaskDue(event.target.value)} type="datetime-local" value={taskDue} />
-            <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground sm:col-span-2" type="submit">Add task</button>
-          </form>
+        {error && (
+          <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="status">
+            {notice}
+          </div>
+        )}
 
-          <ul className="mt-4 space-y-3">
-            {tasks.map((task) => (
-              <li className="rounded-xl border p-4" key={task.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium">{task.title}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {task.due_at ? `Due ${new Date(task.due_at).toLocaleString()}` : "No due date"} · {task.priority}
-                    </p>
-                    <p className="mt-1 text-xs uppercase text-muted-foreground">{task.status.replace("_", " ")}</p>
+        {loading ? (
+          <div className="mt-8 space-y-4" role="status">
+            <p className="sr-only">Loading your learning data…</p>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Skeleton className="h-64 w-full rounded-2xl" />
+              <Skeleton className="h-64 w-full rounded-2xl" />
+            </div>
+          </div>
+        ) : (
+          <Tabs defaultValue="planner" className="mt-8">
+            <TabsList className="h-9">
+              <TabsTrigger value="planner" className="gap-1.5">
+                <ListTodo className="size-3.5" />
+                Academic Tasks
+                {tasks.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{tasks.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="plans" className="gap-1.5">
+                <Calendar className="size-3.5" />
+                Study Plans
+                {plans.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{plans.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="quizzes" className="gap-1.5">
+                <BrainCircuit className="size-3.5" />
+                Learning Studio & Quizzes
+                {quizzes.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{quizzes.length}</Badge>}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Tasks Tab */}
+            <TabsContent value="planner" className="mt-6">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+                {/* Task List */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-foreground">Active Tasks & Deadlines</h2>
+                    <Badge variant="outline">{tasks.filter((t) => t.status !== "completed").length} pending</Badge>
                   </div>
-                  <div className="flex gap-2">
-                    {task.status !== "completed" && (
-                      <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void updateTask(task, "completed")} type="button">Complete</button>
-                    )}
-                    {(task.owner_id !== null || role !== "student") && (
-                      <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void deleteTask(task)} type="button">Delete</button>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-            {!loading && tasks.length === 0 && <li className="rounded-xl border p-4 text-sm text-muted-foreground">No tasks yet.</li>}
-          </ul>
 
-          <form className="mt-8 grid gap-3 rounded-xl border p-5 sm:grid-cols-2" onSubmit={createPlan}>
-            <h2 className="text-lg font-semibold sm:col-span-2">Generate a study plan</h2>
-            <label className="text-sm sm:col-span-2" htmlFor="plan-title">Plan title</label>
-            <input className="h-10 rounded-md border bg-background px-3 sm:col-span-2" id="plan-title" maxLength={200} onChange={(event) => setPlanTitle(event.target.value)} required value={planTitle} />
-            <label className="text-sm sm:col-span-2" htmlFor="plan-topic">Topic or learning goal</label>
-            <textarea className="min-h-20 rounded-md border bg-background px-3 py-2 sm:col-span-2" id="plan-topic" maxLength={2000} minLength={3} onChange={(event) => setPlanTopic(event.target.value)} required value={planTopic} />
-            <label className="text-sm" htmlFor="plan-start">Starts</label>
-            <label className="text-sm" htmlFor="plan-end">Ends</label>
-            <input className="h-10 rounded-md border bg-background px-3" id="plan-start" onChange={(event) => setPlanStart(event.target.value)} required type="date" value={planStart} />
-            <input className="h-10 rounded-md border bg-background px-3" id="plan-end" onChange={(event) => setPlanEnd(event.target.value)} required type="date" value={planEnd} />
-            <label className="text-sm" htmlFor="plan-capacity">Available minutes per day</label>
-            <input className="h-10 rounded-md border bg-background px-3" id="plan-capacity" max={600} min={15} onChange={(event) => setDailyCapacity(Number(event.target.value))} required type="number" value={dailyCapacity} />
-            <label className="text-sm sm:col-span-2" htmlFor="plan-context">Known deadlines or constraints (optional)</label>
-            <textarea className="min-h-20 rounded-md border bg-background px-3 py-2 sm:col-span-2" id="plan-context" maxLength={4000} onChange={(event) => setPlanningContext(event.target.value)} value={planningContext} />
-            <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground sm:col-span-2" type="submit">Generate &amp; save plan</button>
-          </form>
-          <ul className="mt-4 space-y-2">
-            {plans.map((plan) => (
-              <li className="rounded-xl border p-4" key={plan.id}>
-                <p className="font-medium">{plan.title}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {plan.starts_on ?? "No start date"} – {plan.ends_on ?? "No end date"} · {plan.schedule.length} scheduled blocks
-                </p>
-                {plan.summary && <p className="mt-3 whitespace-pre-wrap text-sm">{plan.summary}</p>}
-                {plan.schedule.length > 0 && (
-                  <ul className="mt-3 space-y-2 border-t pt-3">
-                    {plan.schedule.map((block, index) => (
-                      <li className="text-sm" key={`${block.day}-${block.topic}-${index}`}>
-                        <span className="font-medium">{block.day} · {block.topic}</span>
-                        <span className="text-muted-foreground"> · {block.duration_minutes} min{block.priority ? ` · ${block.priority} priority` : ""}</span>
-                        {block.rationale && <p className="mt-1 text-muted-foreground">{block.rationale}</p>}
+                  <ul className="space-y-3">
+                    {tasks.map((task) => (
+                      <li key={task.id}>
+                        <Card className="p-4 shadow-xs">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-medium text-foreground text-sm">{task.title}</h3>
+                                <Badge
+                                  variant={
+                                    task.status === "completed"
+                                      ? "secondary"
+                                      : task.priority === "high"
+                                      ? "destructive"
+                                      : "default"
+                                  }
+                                  className="text-[10px] capitalize"
+                                >
+                                  {task.priority}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {task.due_at ? `Due ${new Date(task.due_at).toLocaleString()}` : "No due date"}
+                              </p>
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {task.status.replace("_", " ")}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              {task.status !== "completed" && (
+                                <Button
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => void updateTask(task, "completed")}
+                                  type="button"
+                                >
+                                  <CheckCircle2 className="size-3 mr-1 text-emerald-600" />
+                                  Complete
+                                </Button>
+                              )}
+                              {(task.owner_id !== null || role !== "student") && (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  className="text-destructive hover:bg-destructive/10"
+                                  onClick={() => void deleteTask(task)}
+                                  type="button"
+                                >
+                                  <Trash2 className="size-3 mr-1" />
+                                  Delete
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
                       </li>
                     ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold">Learning studio</h2>
-          <form className="mt-4 grid gap-3 rounded-xl border p-5 sm:grid-cols-[1fr_auto_auto]" onSubmit={generateQuiz}>
-            <label className="text-sm sm:col-span-3" htmlFor="quiz-topic">Generate a quiz from a topic</label>
-            <input className="h-10 min-w-0 rounded-md border bg-background px-3" id="quiz-topic" maxLength={1000} minLength={3} onChange={(event) => setQuizTopic(event.target.value)} required value={quizTopic} />
-            <label className="sr-only" htmlFor="quiz-count">Question count</label>
-            <input className="h-10 w-20 rounded-md border bg-background px-3" id="quiz-count" max={20} min={1} onChange={(event) => setQuestionCount(Number(event.target.value))} type="number" value={questionCount} />
-            <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground" type="submit">Generate</button>
-            {(role === "professor" || role === "administrator") && (
-              <div className="grid gap-3 sm:col-span-3 sm:grid-cols-2">
-                <label className="text-sm" htmlFor="quiz-course">Course (optional)</label>
-                <select className="h-10 rounded-md border bg-background px-3" id="quiz-course" onChange={(event) => setQuizCourseId(event.target.value)} value={quizCourseId}>
-                  <option value="">Personal quiz</option>
-                  {courses.map((course) => <option key={course.id} value={course.id}>{course.code} · {course.name}</option>)}
-                </select>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                  <input checked={quizPublished} onChange={(event) => setQuizPublished(event.target.checked)} type="checkbox" />
-                  Publish this quiz to enrolled students
-                </label>
-              </div>
-            )}
-          </form>
-
-          {activeQuiz && (
-            <form className="mt-5 space-y-5 rounded-xl border p-5" onSubmit={submitQuiz}>
-              <div>
-                <h3 className="text-lg font-semibold">{activeQuiz.title}</h3>
-                {activeQuiz.description && <p className="mt-2 text-sm text-muted-foreground">{activeQuiz.description}</p>}
-              </div>
-              {activeQuiz.questions.map((question) => (
-                <fieldset className="space-y-2" key={question.id}>
-                  <legend className="font-medium">{question.position + 1}. {question.prompt}</legend>
-                  {question.options.map((option) => (
-                    <label className="flex items-center gap-2 text-sm" key={option}>
-                      <input
-                        checked={answers[question.id] === option}
-                        name={question.id}
-                        onChange={() => setAnswers((current) => ({ ...current, [question.id]: option }))}
-                        type="radio"
-                        value={option}
+                    {tasks.length === 0 && (
+                      <EmptyState
+                        icon={CheckCircle2}
+                        title="No tasks yet"
+                        description="Add a task or assignment using the planner on the right."
                       />
-                      {option}
-                    </label>
-                  ))}
-                </fieldset>
-              ))}
-              <button className="h-10 rounded-md bg-primary px-4 text-primary-foreground" type="submit">Submit answers</button>
-            </form>
-          )}
-
-          {attempt && (
-            <section className="mt-5 rounded-xl border p-5" aria-live="polite">
-              <h3 className="font-semibold">Score: {attempt.score} / {attempt.total_points}</h3>
-              <ul className="mt-3 space-y-3">
-                {attempt.feedback.map((item, index) => (
-                  <li className="text-sm" key={item.question_id}>
-                    <p>{index + 1}. {item.correct ? "Correct" : `Review: ${item.answer ?? "No answer key available"}`}</p>
-                    {item.explanation && <p className="mt-1 text-muted-foreground">{item.explanation}</p>}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <h3 className="mt-8 text-lg font-semibold">Saved quizzes</h3>
-          <ul className="mt-3 space-y-2">
-            {quizzes.map((quiz) => (
-              <li className="flex items-center justify-between gap-3 rounded-xl border p-4" key={quiz.id}>
-                <div>
-                  <p className="font-medium">{quiz.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{quiz.questions.length} questions</p>
+                    )}
+                  </ul>
                 </div>
-                <button className="rounded-md border px-3 py-2 text-sm" onClick={() => { setActiveQuiz(quiz); setAnswers({}); setAttempt(null); }} type="button">
-                  Practice
-                </button>
-              </li>
-            ))}
-            {!loading && quizzes.length === 0 && <li className="rounded-xl border p-4 text-sm text-muted-foreground">Generate a quiz to begin.</li>}
-          </ul>
-        </section>
-      </div>
-    </main>
+
+                {/* Add Task Form */}
+                <div>
+                  <Card className="p-5 shadow-xs sticky top-24">
+                    <CardTitle className="text-base font-semibold">Add a task</CardTitle>
+                    <CardDescription className="text-xs mt-1">
+                      Set assignments, due dates, and study milestones.
+                    </CardDescription>
+                    <form className="mt-4 space-y-3" onSubmit={createTask}>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="task-title">
+                          Task or assignment
+                        </label>
+                        <Input
+                          id="task-title"
+                          maxLength={200}
+                          onChange={(event) => setTaskTitle(event.target.value)}
+                          placeholder="e.g. Algorithms Problem Set 3"
+                          required
+                          value={taskTitle}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="task-due">
+                          Due date
+                        </label>
+                        <Input
+                          id="task-due"
+                          onChange={(event) => setTaskDue(event.target.value)}
+                          type="datetime-local"
+                          value={taskDue}
+                        />
+                      </div>
+                      <Button className="w-full" type="submit">
+                        Add task
+                      </Button>
+                    </form>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Study Plans Tab */}
+            <TabsContent value="plans" className="mt-6">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+                {/* Generated Plans */}
+                <div className="space-y-4">
+                  <h2 className="text-xl font-semibold text-foreground">Saved Study Plans</h2>
+                  <ul className="space-y-3">
+                    {plans.map((plan) => (
+                      <li key={plan.id}>
+                        <Card className="p-5 shadow-xs">
+                          <CardTitle className="text-base font-semibold">{plan.title}</CardTitle>
+                          <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Clock className="size-3" />
+                            {plan.starts_on ?? "No start date"} – {plan.ends_on ?? "No end date"} · {plan.schedule.length} scheduled blocks
+                          </p>
+                          {plan.summary && (
+                            <p className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-foreground bg-muted/30 p-3 rounded-lg">
+                              {plan.summary}
+                            </p>
+                          )}
+                          {plan.schedule.length > 0 && (
+                            <div className="mt-4 border-t pt-3">
+                              <h4 className="text-xs font-semibold text-foreground mb-2">Schedule breakdown:</h4>
+                              <ul className="space-y-2">
+                                {plan.schedule.map((block, index) => (
+                                  <li
+                                    key={`${block.day}-${block.topic}-${index}`}
+                                    className="text-xs border rounded-lg p-2.5 bg-card/60"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-semibold text-foreground">{block.day} · {block.topic}</span>
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {block.duration_minutes} min
+                                      </Badge>
+                                    </div>
+                                    {block.rationale && (
+                                      <p className="mt-1 text-muted-foreground text-[11px] leading-relaxed">
+                                        {block.rationale}
+                                      </p>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </Card>
+                      </li>
+                    ))}
+                    {plans.length === 0 && (
+                      <EmptyState
+                        icon={Calendar}
+                        title="No study plans yet"
+                        description="Generate an optimized AI study plan using the generator on the right."
+                      />
+                    )}
+                  </ul>
+                </div>
+
+                {/* Generate Plan Form */}
+                <div>
+                  <Card className="p-5 shadow-xs">
+                    <CardTitle className="text-base font-semibold">Generate a study plan</CardTitle>
+                    <CardDescription className="text-xs mt-1">
+                      Our multi-agent planner balances topics, capacity, and deadlines.
+                    </CardDescription>
+                    <form className="mt-4 space-y-3" onSubmit={createPlan}>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-title">
+                          Plan title
+                        </label>
+                        <Input
+                          id="plan-title"
+                          maxLength={200}
+                          onChange={(event) => setPlanTitle(event.target.value)}
+                          placeholder="e.g. Midterm Preparation"
+                          required
+                          value={planTitle}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-topic">
+                          Topic or learning goal
+                        </label>
+                        <Textarea
+                          id="plan-topic"
+                          maxLength={2000}
+                          minLength={3}
+                          onChange={(event) => setPlanTopic(event.target.value)}
+                          placeholder="e.g. Dynamic Programming, Graph algorithms, and greedy heuristics"
+                          required
+                          value={planTopic}
+                          className="min-h-20 text-xs"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-start">
+                            Starts
+                          </label>
+                          <Input
+                            id="plan-start"
+                            onChange={(event) => setPlanStart(event.target.value)}
+                            required
+                            type="date"
+                            value={planStart}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-end">
+                            Ends
+                          </label>
+                          <Input
+                            id="plan-end"
+                            onChange={(event) => setPlanEnd(event.target.value)}
+                            required
+                            type="date"
+                            value={planEnd}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-capacity">
+                          Available minutes per day
+                        </label>
+                        <Input
+                          id="plan-capacity"
+                          max={600}
+                          min={15}
+                          onChange={(event) => setDailyCapacity(Number(event.target.value))}
+                          required
+                          type="number"
+                          value={dailyCapacity}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="plan-context">
+                          Known deadlines or constraints (optional)
+                        </label>
+                        <Textarea
+                          id="plan-context"
+                          maxLength={4000}
+                          onChange={(event) => setPlanningContext(event.target.value)}
+                          value={planningContext}
+                          placeholder="e.g. Have exam on Thursday, busy Wednesday afternoon"
+                          className="min-h-16 text-xs"
+                        />
+                      </div>
+                      <Button className="w-full" type="submit">
+                        Generate &amp; save plan
+                      </Button>
+                    </form>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Quizzes Tab */}
+            <TabsContent value="quizzes" className="mt-6">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+                {/* Active Quiz Area & Saved Quizzes */}
+                <div className="space-y-6">
+                  {activeQuiz ? (
+                    <Card className="p-6 shadow-sm border-primary/40">
+                      <form className="space-y-6" onSubmit={submitQuiz}>
+                        <div>
+                          <Badge variant="outline" className="mb-2">Active Quiz</Badge>
+                          <h3 className="text-xl font-semibold text-foreground">{activeQuiz.title}</h3>
+                          {activeQuiz.description && (
+                            <p className="mt-1 text-xs text-muted-foreground">{activeQuiz.description}</p>
+                          )}
+                        </div>
+
+                        {activeQuiz.questions.map((question) => (
+                          <fieldset className="space-y-2 border-t pt-4" key={question.id}>
+                            <legend className="text-sm font-medium text-foreground">
+                              {question.position + 1}. {question.prompt}
+                            </legend>
+                            <div className="mt-2 space-y-2">
+                              {question.options.map((option) => (
+                                <label
+                                  className={`flex items-center gap-2.5 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${
+                                    answers[question.id] === option
+                                      ? "border-primary bg-primary/5 text-foreground font-medium"
+                                      : "border-border hover:bg-muted/40 text-muted-foreground"
+                                  }`}
+                                  key={option}
+                                >
+                                  <input
+                                    checked={answers[question.id] === option}
+                                    name={question.id}
+                                    onChange={() =>
+                                      setAnswers((current) => ({
+                                        ...current,
+                                        [question.id]: option,
+                                      }))
+                                    }
+                                    type="radio"
+                                    value={option}
+                                    className="accent-primary size-4"
+                                  />
+                                  <span>{option}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+                        ))}
+
+                        <Button className="w-full" type="submit">
+                          Submit answers
+                        </Button>
+                      </form>
+
+                      {attempt && (
+                        <div className="mt-6 rounded-xl border border-primary/30 bg-primary/5 p-5 animate-in fade-in-50" aria-live="polite">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                              <Award className="size-5 text-primary" />
+                              Quiz Results
+                            </h3>
+                            <Badge variant="default" className="text-sm">
+                              Score: {attempt.score} / {attempt.total_points}
+                            </Badge>
+                          </div>
+                          <ul className="mt-4 space-y-3">
+                            {attempt.feedback.map((item, index) => (
+                              <li key={item.question_id} className="text-xs border rounded-lg p-3 bg-background">
+                                <p className="font-semibold text-foreground">
+                                  Question {index + 1}:{" "}
+                                  <span className={item.correct ? "text-emerald-600" : "text-destructive"}>
+                                    {item.correct ? "✓ Correct" : `✗ Review: ${item.answer ?? "No answer key available"}`}
+                                  </span>
+                                </p>
+                                {item.explanation && (
+                                  <p className="mt-1 text-muted-foreground leading-relaxed">{item.explanation}</p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </Card>
+                  ) : null}
+
+                  {/* Saved Quizzes */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Saved practice quizzes</h3>
+                    <ul className="space-y-3">
+                      {quizzes.map((quiz) => (
+                        <li key={quiz.id}>
+                          <Card className="p-4 flex items-center justify-between shadow-xs">
+                            <div>
+                              <p className="font-medium text-sm text-foreground">{quiz.title}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {quiz.questions.length} questions · {new Date(quiz.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setActiveQuiz(quiz);
+                                setAnswers({});
+                                setAttempt(null);
+                              }}
+                              type="button"
+                              className="gap-1.5"
+                            >
+                              <Play className="size-3.5" />
+                              Practice
+                            </Button>
+                          </Card>
+                        </li>
+                      ))}
+                      {quizzes.length === 0 && (
+                        <EmptyState
+                          icon={BrainCircuit}
+                          title="No quizzes generated yet"
+                          description="Generate a custom quiz from any topic or lecture note to begin."
+                        />
+                      )}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Generator Form */}
+                <div>
+                  <Card className="p-5 shadow-xs sticky top-24">
+                    <CardTitle className="text-base font-semibold">Generate a quiz</CardTitle>
+                    <CardDescription className="text-xs mt-1">
+                      AI crafts targeted multiple-choice questions with instant scoring.
+                    </CardDescription>
+
+                    <form className="mt-4 space-y-3" onSubmit={generateQuiz}>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="quiz-topic">
+                          Topic or concept
+                        </label>
+                        <Input
+                          id="quiz-topic"
+                          maxLength={1000}
+                          minLength={3}
+                          onChange={(event) => setQuizTopic(event.target.value)}
+                          placeholder="e.g. Asymptotic Notation and Recurrences"
+                          required
+                          value={quizTopic}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="quiz-count">
+                          Question count
+                        </label>
+                        <Input
+                          id="quiz-count"
+                          max={20}
+                          min={1}
+                          onChange={(event) => setQuestionCount(Number(event.target.value))}
+                          type="number"
+                          value={questionCount}
+                        />
+                      </div>
+                      {(role === "professor" || role === "administrator") && (
+                        <div className="space-y-3 border-t pt-3">
+                          <div>
+                            <label className="block text-xs font-medium text-foreground mb-1" htmlFor="quiz-course">
+                              Course (optional)
+                            </label>
+                            <select
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                              id="quiz-course"
+                              onChange={(event) => setQuizCourseId(event.target.value)}
+                              value={quizCourseId}
+                            >
+                              <option value="">Personal quiz</option>
+                              {courses.map((course) => (
+                                <option key={course.id} value={course.id}>
+                                  {course.code} · {course.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                              checked={quizPublished}
+                              onChange={(event) => setQuizPublished(event.target.checked)}
+                              type="checkbox"
+                              className="accent-primary size-3.5"
+                            />
+                            <span>Publish this quiz to enrolled students</span>
+                          </label>
+                        </div>
+                      )}
+                      <Button className="w-full gap-2" type="submit">
+                        <Sparkles className="size-3.5" />
+                        Generate quiz
+                      </Button>
+                    </form>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        )}
+      </main>
+    </div>
   );
 }
