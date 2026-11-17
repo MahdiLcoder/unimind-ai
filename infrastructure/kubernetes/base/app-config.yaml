@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unimind-config
+data:
+  APP_ENV: production
+  POSTGRES_DB: unimind
+  POSTGRES_USER: unimind
+  POSTGRES_HOST: postgres
+  CORS_ORIGINS: https://unimind.example.com
+  CLERK_AUTHORIZED_PARTIES: https://unimind.example.com
+  API_RATE_LIMIT_ENABLED: "true"
+  API_RATE_LIMIT_REQUESTS: "120"
+  API_RATE_LIMIT_WINDOW_SECONDS: "60"
+  HF_RERANKER_ENABLED: "false"
+  HF_DEVICE: cpu
+  HF_BATCH_SIZE: "2"

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unimind-config
+data:
+  APP_ENV: production
+  CORS_ORIGINS: https://unimind.example.com
+  CLERK_AUTHORIZED_PARTIES: https://unimind.example.com

@@ -1,0 +1,62 @@
+name: Roll back Kubernetes deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment to roll back
+        type: choice
+        required: true
+        options:
+          - all
+          - api
+          - web
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure Kubernetes access
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          test -n "$KUBECONFIG_DATA"
+          printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.32.0
+
+      - name: Undo selected rollout
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          case "$TARGET" in
+            api)
+              kubectl rollout undo deployment/ai-api -n unimind-production
+              kubectl rollout status deployment/ai-api -n unimind-production --timeout=10m
+              ;;
+            web)
+              kubectl rollout undo deployment/web -n unimind-production
+              kubectl rollout status deployment/web -n unimind-production --timeout=10m
+              ;;
+            all)
+              kubectl rollout undo deployment/ai-api -n unimind-production
+              kubectl rollout undo deployment/web -n unimind-production
+              kubectl rollout status deployment/ai-api -n unimind-production --timeout=10m
+              kubectl rollout status deployment/web -n unimind-production --timeout=10m
+              ;;
+            *)
+              echo "Unsupported rollback target" >&2
+              exit 1
+              ;;
+          esac
+          kubectl exec deployment/ai-api -n unimind-production -- \
+            python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"

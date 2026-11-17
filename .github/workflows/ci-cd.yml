@@ -1,0 +1,236 @@
+name: CI and deployment
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate application and migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: unimind
+          POSTGRES_USER: unimind
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U unimind -d unimind"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      APP_ENV: testing
+      POSTGRES_DB: unimind
+      POSTGRES_USER: unimind
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_HOST: 127.0.0.1
+      REDIS_URL: redis://127.0.0.1:6379/0
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python and uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.12.21
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: services/ai-api/uv.lock
+
+      - name: Install Python dependencies
+        working-directory: services/ai-api
+        run: uv sync --frozen --group dev
+
+      - name: Validate database migrations
+        working-directory: services/ai-api
+        run: |
+          uv run alembic upgrade head
+          uv run alembic current --check-heads
+
+      - name: Lint Python
+        working-directory: services/ai-api
+        run: uv run ruff check . ../../ai
+
+      - name: Test Python
+        working-directory: services/ai-api
+        run: uv run pytest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, and test frontend
+        run: pnpm check
+
+      - name: Build frontend
+        run: pnpm --filter web build
+
+  publish:
+    name: Build and publish container images
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+      INSTALL_HF_INFERENCE: ${{ vars.INSTALL_HF_INFERENCE || 'false' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate API image tags
+        id: api-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/unimind-ai-api
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Generate web image tags
+        id: web-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/unimind-ai-web
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/ai-api/Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
+          build-args: INSTALL_HF_INFERENCE=${{ env.INSTALL_HF_INFERENCE }}
+          cache-from: type=gha,scope=ai-api
+          cache-to: type=gha,mode=max,scope=ai-api
+
+      - name: Require production API origin for automatic deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.KUBERNETES_DEPLOY_ENABLED == 'true'
+        env:
+          API_ORIGIN: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: test -n "$API_ORIGIN"
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.web-meta.outputs.tags }}
+          labels: ${{ steps.web-meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    name: Deploy production to Kubernetes
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.KUBERNETES_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure Kubernetes access
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          test -n "$KUBECONFIG_DATA"
+          printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.32.0
+
+      - name: Apply production configuration
+        env:
+          GHCR_OWNER: ${{ github.repository_owner }}
+        run: |
+          owner="$(printf '%s' "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+          sed -i "s#ghcr.io/unimind-ai#ghcr.io/$owner#g" \
+            infrastructure/kubernetes/base/kustomization.yaml
+          kubectl create namespace unimind-production --dry-run=client -o yaml | kubectl apply -f -
+          kubectl delete job ai-api-migrate -n unimind-production --ignore-not-found=true
+          kubectl kustomize --load-restrictor=LoadRestrictionsNone \
+            infrastructure/kubernetes/overlays/production | kubectl apply -f -
+
+      - name: Wait for data services and apply migrations
+        run: |
+          kubectl rollout status statefulset/postgres -n unimind-production --timeout=10m
+          kubectl rollout status statefulset/redis -n unimind-production --timeout=10m
+          kubectl patch job ai-api-migrate -n unimind-production --type=merge -p '{"spec":{"suspend":false}}'
+          kubectl wait --for=condition=complete job/ai-api-migrate -n unimind-production --timeout=10m
+
+      - name: Roll out commit-pinned images
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+        run: |
+          owner="$(printf '%s' "$GHCR_OWNER" | tr '[:upper:]' '[:lower:]')"
+          api_image="ghcr.io/$owner/unimind-ai-api:$IMAGE_TAG"
+          web_image="ghcr.io/$owner/unimind-ai-web:$IMAGE_TAG"
+          kubectl set image deployment/ai-api \
+            api="$api_image" wait-for-schema="$api_image" \
+            -n unimind-production
+          kubectl set image deployment/web web="$web_image" -n unimind-production
+          kubectl rollout status deployment/ai-api -n unimind-production --timeout=10m
+          kubectl rollout status deployment/web -n unimind-production --timeout=10m
+
+      - name: Verify live API readiness
+        run: |
+          kubectl exec deployment/ai-api -n unimind-production -- \
+            python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"
+          kubectl get deployments,statefulsets,pods,services -n unimind-production

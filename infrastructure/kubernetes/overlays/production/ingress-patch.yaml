@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unimind
+spec:
+  tls:
+    - hosts:
+        - unimind.example.com
+        - api.unimind.example.com
+      secretName: unimind-production-tls
+  rules:
+    - host: unimind.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 3000
+    - host: api.unimind.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-api
+                port:
+                  number: 8000

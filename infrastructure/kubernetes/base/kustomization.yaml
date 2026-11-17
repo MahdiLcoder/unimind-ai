@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - app-config.yaml
+  - postgres.yaml
+  - redis.yaml
+  - api.yaml
+  - migration-job.yaml
+  - web.yaml
+  - ingress.yaml
+  - monitoring.yaml
+  - network-policy.yaml
+
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - prometheus.yml=../../monitoring/prometheus.yml
+      - alerts.yml=../../monitoring/alerts.yml
+  - name: grafana-datasource
+    files:
+      - prometheus.yml=../../monitoring/grafana/provisioning/datasources/prometheus.yml
+  - name: grafana-dashboard-provider
+    files:
+      - dashboards.yml=../../monitoring/grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboard
+    files:
+      - unimind-overview.json=../../monitoring/grafana/dashboards/unimind-overview.json
+
+images:
+  - name: ghcr.io/unimind-ai/unimind-ai-api
+    newTag: latest
+  - name: ghcr.io/unimind-ai/unimind-ai-web
+    newTag: latest

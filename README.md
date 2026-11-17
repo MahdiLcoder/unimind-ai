@@ -21,6 +21,12 @@ persistent user memory for learning preferences and progress.
 See [the architecture overview](docs/architecture/overview.md) for service
 boundaries and health checks.
 
+## Deployment and operations
+
+The local developer stack, production-oriented Compose deployment, CI/CD,
+Kubernetes overlays, monitoring, and recovery procedures are documented in
+[Deployment and operations](docs/deployment.md).
+
 ## Phase 8 defense documentation
 
 - [Technical report](docs/report/technical-report.md)
@@ -63,25 +69,28 @@ Services:
 - Liveness: <http://localhost:8000/health/live>
 - Dependency readiness: <http://localhost:8000/health/ready>
 
-The stack includes PostgreSQL, Redis, FastAPI, an internal code runner, and
-Next.js, plus a private CPU-only Ollama service. On first startup, a one-shot
-service pulls the configured `OLLAMA_MODEL` (default `qwen2.5:3b`) into the
-persistent `ollama_data` volume; the model endpoint is not published to the
-host. The API waits for that pull to finish before starting. Compose builds a
-minimal Python execution image in a one-shot service.
+The default stack includes PostgreSQL, Redis, FastAPI, an internal code runner,
+and Next.js. The CPU-only Ollama service and its model pull are opt-in so a
+normal startup does not download model weights. To enable them, run
+`docker compose --profile inference up --build`; the configured model defaults
+to `qwen2.5:3b` and is stored in the persistent `ollama_data` volume. The model
+endpoint is not published to the host. Compose builds a minimal Python
+execution image in a one-shot service.
 Agent execution has a configurable `AGENT_EXECUTION_TIMEOUT_SECONDS` limit
 (120 seconds by default to accommodate local CPU inference).
 For PDF embedding and semantic search, set `INSTALL_HF_INFERENCE=true` before
 building the API image. Hugging Face model files are cached in the persistent
 `hf_model_cache` volume. Set `HF_RERANKER_ENABLED=false` to skip the optional
 reranker and its additional model download.
-The API waits for healthy Postgres, Redis, and runner services, applies Alembic
-migrations (including enabling pgvector), then starts FastAPI. The readiness
+The API waits for healthy Postgres, Redis, and runner services. A separate
+one-shot migration service applies Alembic migrations (including enabling
+pgvector) before FastAPI starts. The readiness
 endpoint returns HTTP 503 unless Postgres and Redis are reachable. Stop with
 `docker compose down`; named volumes retain database and Redis data.
-The host ports default to `5432` and `6379`; set `POSTGRES_HOST_PORT` and
-`REDIS_HOST_PORT` in `.env` if those ports are already in use. The frontend
-host port defaults to `3000`; if it is occupied, set `WEB_HOST_PORT` and update
+The host ports default to `5432`, `6379`, `8000`, and `3000`; set
+`POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `API_HOST_PORT`, or `WEB_HOST_PORT` in
+`.env` if those ports are already in use. The frontend host port defaults to
+`3000`; if it is occupied, update
 `FRONTEND_URL`, `CORS_ORIGINS`, and `CLERK_AUTHORIZED_PARTIES` in `.env` to
 include the frontend origin.
 
@@ -162,9 +171,9 @@ uv run pytest
 ```
 
 For the full Docker health check, use `docker compose up --build -d`, then
-`docker compose ps`; all five long-running services should report healthy
-(the sandbox-image service exits successfully after building its image). Verify the
-extension with:
+`docker compose ps`; the five long-running services should report healthy
+(the `migrate` and `sandbox-image` one-shot services exit successfully). Verify
+the extension with:
 
 ```bash
 docker compose exec postgres sh -c \
