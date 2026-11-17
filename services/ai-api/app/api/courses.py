@@ -14,6 +14,7 @@ from app.core.database import get_db_session
 from app.core.platform import add_audit_log, platform_flag_enabled
 from app.models.academic import (
     AcademicTask,
+    AssignmentSubmission,
     Course,
     Enrollment,
     Quiz,
@@ -134,6 +135,7 @@ class CourseLearningOverview(BaseModel):
     assignment_completions: int
     quiz_attempts: int
     average_quiz_score_percent: float | None
+    pending_submissions_count: int
 
 
 @router.post(
@@ -359,7 +361,9 @@ async def drop_course(
 )
 async def list_course_enrollments(
     course_id: str,
-    professor: Professor,
+    professor: Annotated[
+        User, Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMINISTRATOR))
+    ],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[CourseEnrollmentProgressResponse]:
     course = await session.get(Course, course_id)
@@ -437,7 +441,9 @@ async def list_course_enrollments(
 )
 async def course_learning_overview(
     course_id: str,
-    professor: Professor,
+    professor: Annotated[
+        User, Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMINISTRATOR))
+    ],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> CourseLearningOverview:
     course = await session.get(Course, course_id)
@@ -470,6 +476,15 @@ async def course_learning_overview(
             TaskProgress.status == "completed",
         )
     )
+    pending_submissions_count = await session.scalar(
+        select(func.count(AssignmentSubmission.id))
+        .join(AcademicTask, AcademicTask.id == AssignmentSubmission.task_id)
+        .where(
+            AcademicTask.course_id == course_id,
+            AcademicTask.owner_id.is_(None),
+            AssignmentSubmission.status == "submitted",
+        )
+    )
     quiz_attempts, average_score = (
         await session.execute(
             select(
@@ -498,4 +513,5 @@ async def course_learning_overview(
         average_quiz_score_percent=(
             float(average_score) if average_score is not None else None
         ),
+        pending_submissions_count=pending_submissions_count or 0,
     )

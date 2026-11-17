@@ -194,6 +194,17 @@ optional contact address for polite Crossref API usage. Role changes are
 administrator-only; self-demotion and removal of the final administrator are
 rejected.
 
+The Learning Studio also persists AI-generated lessons per user. Its current
+learning API behavior and persistence boundaries are documented in
+[Learning and planning API](docs/api/learning.md); flashcard generation remains
+session-only.
+Crossref searches are retained as per-user history, and selected saved papers
+can be compared from their saved metadata and abstracts. See
+[Research API](docs/api/research.md) for the routes and evidence limitations.
+The dashboard also allows users to edit app-owned academic profile fields;
+Clerk remains responsible for authentication and email. See
+[User profile API](docs/api/users.md).
+
 The Coding Agent can execute Python in a short-lived container with no network,
 read-only root filesystem, a non-root identity, and CPU, memory, process,
 time, and output limits; only the standard library is available. The runner

@@ -124,3 +124,56 @@ def test_last_administrator_cannot_be_demoted() -> None:
 
     assert response.status_code == 409
     assert target.role == "administrator"
+
+
+def test_user_can_update_app_owned_profile_fields_only() -> None:
+    user = User(
+        clerk_user_id="user_student",
+        email="student@example.edu",
+        role="student",
+        created_at=datetime.now(UTC),
+    )
+    session = RoleSession({user.clerk_user_id: user}, 1)
+
+    async def override_session():
+        yield session
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                "/api/v1/users/me",
+                json={
+                    "display_name": "  Alex Student ",
+                    "university": "University of Example",
+                    "department": "Computer Science",
+                    "program": "BSc",
+                },
+            )
+    finally:
+        _clear_role_overrides()
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Alex Student"
+    assert response.json()["university"] == "University of Example"
+    assert response.json()["role"] == "student"
+    assert user.email == "student@example.edu"
+
+
+def test_profile_update_cannot_change_role_or_email() -> None:
+    user = _admin()
+    session = RoleSession({user.clerk_user_id: user}, 1)
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db_session] = lambda: session
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                "/api/v1/users/me",
+                json={"role": "student", "email": "new@example.edu"},
+            )
+    finally:
+        _clear_role_overrides()
+
+    assert response.status_code == 422
+    assert user.role == "administrator"

@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -15,6 +14,7 @@ import {
   Trash2,
   BookmarkPlus,
   Quote,
+  GitCompareArrows,
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
@@ -50,6 +50,15 @@ const agentResponseSchema = z.object({
   response: z.string(),
   sources: z.array(z.record(z.string(), z.unknown())),
 });
+const searchHistorySchema = z.object({
+  id: z.string().uuid(),
+  query: z.string(),
+  result_count: z.number(),
+  created_at: z.string(),
+});
+const comparisonSchema = z.object({
+  comparison: z.string(),
+});
 
 type Paper = z.infer<typeof paperSchema>;
 
@@ -68,11 +77,14 @@ export default function ResearchContent() {
   const { getToken } = useAuth();
   const [query, setQuery] = useState("");
   const [papers, setPapers] = useState<Paper[]>([]);
+  const [searchHistory, setSearchHistory] = useState<z.infer<typeof searchHistorySchema>[]>([]);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [review, setReview] = useState<string | null>(null);
+  const [comparison, setComparison] = useState<string | null>(null);
   const [copiedDoi, setCopiedDoi] = useState<string | null>(null);
 
   const accessToken = useCallback(async () => {
@@ -83,11 +95,16 @@ export default function ResearchContent() {
 
   const loadPapers = useCallback(async () => {
     const token = await accessToken();
-    setPapers(
-      await apiRequest("/api/v1/research/papers", z.array(paperSchema), {
+    const [savedPapers, history] = await Promise.all([
+      apiRequest("/api/v1/research/papers", z.array(paperSchema), {
         accessToken: token,
-      })
-    );
+      }),
+      apiRequest("/api/v1/research/search-history", z.array(searchHistorySchema), {
+        accessToken: token,
+      }),
+    ]);
+    setPapers(savedPapers);
+    setSearchHistory(history);
   }, [accessToken]);
 
   useEffect(() => {
@@ -110,6 +127,7 @@ export default function ResearchContent() {
     setError(null);
     setNotice(null);
     setReview(null);
+    setComparison(null);
     setBusy(true);
     try {
       const token = await accessToken();
@@ -120,9 +138,33 @@ export default function ResearchContent() {
         accessToken: token,
       });
       setPapers(results);
+      await loadPapers();
       const msg = `${results.length} Crossref record${results.length === 1 ? "" : "s"} saved to your research library.`;
       setNotice(msg);
       toast.success(msg);
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function compareSelectedPapers() {
+    setError(null);
+    setComparison(null);
+    setBusy(true);
+    try {
+      const token = await accessToken();
+      const result = await apiRequest("/api/v1/research/compare", comparisonSchema, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paper_ids: selectedPaperIds }),
+        accessToken: token,
+      });
+      setComparison(result.comparison);
+      toast.success("Saved papers compared");
     } catch (cause) {
       const err = message(cause);
       setError(err);
@@ -168,6 +210,7 @@ export default function ResearchContent() {
       });
       if (!response.ok) throw new Error(`Could not remove paper (${response.status})`);
       setPapers((current) => current.filter((entry) => entry.id !== paper.id));
+      setSelectedPaperIds((current) => current.filter((id) => id !== paper.id));
       toast.success("Paper removed from library");
     } catch (cause) {
       const err = message(cause);
@@ -254,6 +297,22 @@ export default function ResearchContent() {
           ))}
         </div>
 
+        {searchHistory.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-medium text-muted-foreground">Recent searches:</span>
+            {searchHistory.slice(0, 8).map((entry) => (
+              <button
+                className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                key={entry.id}
+                onClick={() => setQuery(entry.query)}
+                type="button"
+              >
+                {entry.query}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Research Papers List */}
         {papers.length > 0 && (
           <section className="mt-10">
@@ -271,6 +330,16 @@ export default function ResearchContent() {
               >
                 <Sparkles className="size-4 text-primary" />
                 Generate literature review
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={busy || selectedPaperIds.length < 2}
+                onClick={() => void compareSelectedPapers()}
+                type="button"
+              >
+                <GitCompareArrows className="size-4 text-primary" />
+                Compare selected ({selectedPaperIds.length}/3)
               </Button>
             </div>
 
@@ -291,6 +360,27 @@ export default function ResearchContent() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            aria-label={`Select ${paper.title} for comparison`}
+                            checked={selectedPaperIds.includes(paper.id)}
+                            disabled={
+                              !selectedPaperIds.includes(paper.id) &&
+                              selectedPaperIds.length >= 3
+                            }
+                            onChange={(event) => {
+                              const checked = event.currentTarget.checked;
+                              setSelectedPaperIds((current) => {
+                                if (checked) {
+                                  return current.length < 3 ? [...current, paper.id] : current;
+                                }
+                                return current.filter((id) => id !== paper.id);
+                              });
+                            }}
+                            type="checkbox"
+                          />
+                          Compare
+                        </label>
                         <Button
                           variant="ghost"
                           size="xs"
@@ -322,6 +412,25 @@ export default function ResearchContent() {
                       <p className="mt-3 text-xs leading-relaxed text-muted-foreground bg-muted/20 p-3 rounded-lg">
                         {paper.abstract}
                       </p>
+                    )}
+
+                    {comparison && (
+                      <Card className="mt-8 p-6" aria-live="polite">
+                        <CardHeader className="p-0 pb-4">
+                          <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                            <GitCompareArrows className="size-5 text-primary" />
+                            Saved-paper comparison
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            Generated from the selected saved records and their available abstracts.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground bg-muted/20 p-4 rounded-lg">
+                            {comparison}
+                          </p>
+                        </CardContent>
+                      </Card>
                     )}
 
                     <div className="mt-4 flex flex-wrap items-center gap-3 text-xs border-t pt-3">

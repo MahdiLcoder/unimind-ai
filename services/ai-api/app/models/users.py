@@ -33,6 +33,10 @@ class User(Base):
         default=UserRole.STUDENT.value,
         server_default=text("'student'"),
     )
+    display_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    university: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    program: Mapped[str | None] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

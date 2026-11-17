@@ -1,7 +1,13 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -10,6 +16,7 @@ import {
   CheckCircle2,
   Trash2,
   BrainCircuit,
+  BookOpenText,
   Clock,
   Play,
   Award,
@@ -110,10 +117,43 @@ const courseSchema = z.object({
   code: z.string(),
   name: z.string(),
 });
+const assignmentSubmissionSchema = z.object({
+  id: z.string().uuid(),
+  task_id: z.string().uuid(),
+  task_title: z.string(),
+  course_id: z.string(),
+  student_id: z.string(),
+  student_email: z.string().nullable(),
+  content: z.string(),
+  status: z.enum(["submitted", "reviewed"]),
+  grade: z.number().nullable(),
+  feedback: z.string().nullable(),
+  submitted_at: z.string(),
+  reviewed_at: z.string().nullable(),
+  reviewed_by: z.string().nullable(),
+});
 const flashcardSchema = z.object({
   front: z.string(),
   back: z.string(),
   hint: z.string(),
+});
+const lessonSchema = z.object({
+  id: z.string().uuid(),
+  owner_id: z.string(),
+  course_id: z.string().nullable(),
+  title: z.string(),
+  content: z.string(),
+  created_at: z.string(),
+});
+const learningProgressSchema = z.object({
+  quiz_attempts: z.number(),
+  average_score_percent: z.number().nullable(),
+  knowledge_gaps: z.array(
+    z.object({
+      topic: z.string(),
+      missed_questions: z.number(),
+    })
+  ),
 });
 
 type Task = z.infer<typeof taskSchema>;
@@ -121,9 +161,25 @@ type StudyPlan = z.infer<typeof studyPlanSchema>;
 type Quiz = z.infer<typeof quizSchema>;
 type Attempt = z.infer<typeof quizAttemptSchema>;
 type Course = z.infer<typeof courseSchema>;
+type AssignmentSubmission = z.infer<typeof assignmentSubmissionSchema>;
 
 function message(cause: unknown): string {
   return cause instanceof Error ? cause.message : "The request could not be completed";
+}
+
+function localDateString(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function subscribeToLocalDate(): () => void {
+  return () => {};
+}
+
+function getLocalCalendarDate(): string {
+  return localDateString(new Date());
 }
 
 export default function LearningContent() {
@@ -131,7 +187,11 @@ export default function LearningContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [lessons, setLessons] = useState<z.infer<typeof lessonSchema>[]>([]);
+  const [progress, setProgress] = useState<z.infer<typeof learningProgressSchema> | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [submissions, setSubmissions] = useState<Record<string, AssignmentSubmission>>({});
+  const [submissionDrafts, setSubmissionDrafts] = useState<Record<string, string>>({});
   const [role, setRole] = useState<"student" | "professor" | "administrator" | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -148,6 +208,11 @@ export default function LearningContent() {
   const [questionCount, setQuestionCount] = useState(5);
   const [quizCourseId, setQuizCourseId] = useState("");
   const [quizPublished, setQuizPublished] = useState(false);
+  const [lessonTopic, setLessonTopic] = useState("");
+  const [lessonCourseId, setLessonCourseId] = useState("");
+  const [generatingLesson, setGeneratingLesson] = useState(false);
+  const [calendarMode, setCalendarMode] = useState<"day" | "week">("week");
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const [flashcardTopic, setFlashcardTopic] = useState("");
   const [flashcardCount, setFlashcardCount] = useState(10);
   const [flashcards, setFlashcards] = useState<z.infer<typeof flashcardSchema>[]>([]);
@@ -157,6 +222,66 @@ export default function LearningContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const initialCalendarDate = useSyncExternalStore(
+    subscribeToLocalDate,
+    getLocalCalendarDate,
+    () => null
+  );
+  const activeCalendarDate = calendarDate ?? initialCalendarDate;
+  const selectedCalendarDate = activeCalendarDate
+    ? new Date(`${activeCalendarDate}T12:00:00`)
+    : null;
+  const firstCalendarDate = selectedCalendarDate
+    ? new Date(
+        selectedCalendarDate.getFullYear(),
+        selectedCalendarDate.getMonth(),
+        selectedCalendarDate.getDate()
+      )
+    : null;
+  if (calendarMode === "week" && firstCalendarDate) {
+    firstCalendarDate.setDate(
+      firstCalendarDate.getDate() - ((firstCalendarDate.getDay() + 6) % 7)
+    );
+  }
+  const calendarDays = firstCalendarDate
+    ? Array.from(
+        { length: calendarMode === "week" ? 7 : 1 },
+        (_, index) =>
+          localDateString(
+            new Date(
+              firstCalendarDate.getFullYear(),
+              firstCalendarDate.getMonth(),
+              firstCalendarDate.getDate() + index
+            )
+          )
+      )
+    : [];
+  let calendarHeading = "Preparing calendar…";
+  if (selectedCalendarDate && calendarMode === "day") {
+    calendarHeading = selectedCalendarDate.toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  } else if (calendarDays.length === 7) {
+    calendarHeading = `${new Date(`${calendarDays[0]}T12:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    })} – ${new Date(`${calendarDays[6]}T12:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  }
+
+  function moveCalendar(direction: -1 | 1) {
+    const nextDate = activeCalendarDate
+      ? new Date(`${activeCalendarDate}T12:00:00`)
+      : new Date();
+    nextDate.setDate(nextDate.getDate() + direction * (calendarMode === "week" ? 7 : 1));
+    setCalendarDate(localDateString(nextDate));
+  }
 
   const token = useCallback(async () => {
     const value = await getToken();
@@ -166,19 +291,33 @@ export default function LearningContent() {
 
   const load = useCallback(async () => {
     const accessToken = await token();
-    const [taskList, planList, quizList, profile, courseList] = await Promise.all([
+    const [taskList, planList, quizList, lessonList, learningProgress, profile, courseList] =
+      await Promise.all([
       apiRequest("/api/v1/tasks", z.array(taskSchema), { accessToken }),
       apiRequest("/api/v1/study-plans", z.array(studyPlanSchema), { accessToken }),
       apiRequest("/api/v1/quizzes", z.array(quizSchema), { accessToken }),
+      apiRequest("/api/v1/lessons", z.array(lessonSchema), { accessToken }),
+      apiRequest("/api/v1/learning/progress", learningProgressSchema, { accessToken }),
       apiRequest("/api/v1/users/me", userProfileSchema, { accessToken }),
       apiRequest("/api/v1/courses", z.array(courseSchema), { accessToken }),
-    ]);
+      ]);
     setTasks(taskList);
     setPlans(planList);
     setQuizzes(quizList);
+    setLessons(lessonList);
+    setProgress(learningProgress);
     setRole(profile.role);
     setCourses(courseList);
     setQuizCourseId((selected) => selected || courseList[0]?.id || "");
+    setLessonCourseId((selected) => selected || courseList[0]?.id || "");
+    const submissionList = profile.role === "student"
+      ? await apiRequest(
+          "/api/v1/tasks/submissions/mine",
+          z.array(assignmentSubmissionSchema),
+          { accessToken }
+        )
+      : [];
+    setSubmissions(Object.fromEntries(submissionList.map((submission) => [submission.task_id, submission])));
   }, [token]);
 
   useEffect(() => {
@@ -237,6 +376,33 @@ export default function LearningContent() {
         accessToken,
       });
       toast.success(`Task marked as ${status}`);
+      await load();
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function submitAssignment(event: FormEvent<HTMLFormElement>, task: Task) {
+    event.preventDefault();
+    setError(null);
+    try {
+      const accessToken = await token();
+      const submission = await apiRequest(
+        `/api/v1/tasks/${task.id}/submissions`,
+        assignmentSubmissionSchema,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: submissionDrafts[task.id] ?? "" }),
+          accessToken,
+        }
+      );
+      setSubmissions((current) => ({ ...current, [task.id]: submission }));
+      setSubmissionDrafts((current) => ({ ...current, [task.id]: submission.content }));
+      setNotice("Assignment submitted for review.");
+      toast.success("Assignment submitted for review.");
       await load();
     } catch (cause) {
       const err = message(cause);
@@ -329,6 +495,38 @@ export default function LearningContent() {
     }
   }
 
+  async function generateLesson(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setGeneratingLesson(true);
+    try {
+      const accessToken = await token();
+      const lesson = await apiRequest(
+        "/api/v1/lessons/generate",
+        lessonSchema,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: lessonTopic,
+            course_id: lessonCourseId || null,
+          }),
+          accessToken,
+        }
+      );
+      setLessons((current) => [lesson, ...current]);
+      setLessonTopic("");
+      setNotice("AI lesson generated and saved to your Learning Studio.");
+      toast.success("AI lesson generated and saved.");
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setGeneratingLesson(false);
+    }
+  }
+
   async function generateFlashcards(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -382,6 +580,7 @@ export default function LearningContent() {
       );
       setAttempt(result);
       toast.success(`Quiz completed! Score: ${result.score} / ${result.total_points}`);
+      await load();
     } catch (cause) {
       const err = message(cause);
       setError(err);
@@ -431,6 +630,19 @@ export default function LearningContent() {
                 Study Plans
                 {plans.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{plans.length}</Badge>}
               </TabsTrigger>
+              <TabsTrigger value="calendar" className="gap-1.5">
+                <Calendar className="size-3.5" />
+                Calendar
+              </TabsTrigger>
+              <TabsTrigger value="lessons" className="gap-1.5">
+                <BookOpenText className="size-3.5" />
+                Lessons
+                {lessons.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{lessons.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="progress" className="gap-1.5">
+                <Award className="size-3.5" />
+                Progress
+              </TabsTrigger>
               <TabsTrigger value="quizzes" className="gap-1.5">
                 <BrainCircuit className="size-3.5" />
                 Learning Studio & Quizzes
@@ -440,6 +652,118 @@ export default function LearningContent() {
                 <Sparkles className="size-3.5" /> Flashcards
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="calendar" className="mt-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    aria-label="Previous calendar period"
+                    onClick={() => moveCalendar(-1)}
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <Button
+                    aria-label="Next calendar period"
+                    onClick={() => moveCalendar(1)}
+                    size="icon-sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                  <h2 className="ml-1 text-sm font-semibold">{calendarHeading}</h2>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    aria-pressed={calendarMode === "day"}
+                    onClick={() => setCalendarMode("day")}
+                    size="xs"
+                    type="button"
+                    variant={calendarMode === "day" ? "default" : "outline"}
+                  >
+                    Day
+                  </Button>
+                  <Button
+                    aria-pressed={calendarMode === "week"}
+                    onClick={() => setCalendarMode("week")}
+                    size="xs"
+                    type="button"
+                    variant={calendarMode === "week" ? "default" : "outline"}
+                  >
+                    Week
+                  </Button>
+                </div>
+              </div>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Calendar entries come from saved task deadlines and active study-plan schedules. They are displayed as saved; no automatic rescheduling occurs.
+              </p>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {calendarDays.map((day) => {
+                  const dueTasks = tasks.filter(
+                    (task) => task.due_at && localDateString(new Date(task.due_at)) === day
+                  );
+                  const studyBlocks = plans.flatMap((plan) =>
+                    plan.status === "active"
+                      ? plan.schedule
+                          .map((block, index) => ({ block, index, plan }))
+                          .filter(({ block }) => block.day === day)
+                      : []
+                  );
+                  return (
+                    <Card className="min-h-40 p-4" key={day}>
+                      <h3 className="mb-3 text-sm font-semibold">
+                        {new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </h3>
+                      <ul className="space-y-2">
+                        {dueTasks.map((task) => {
+                          if (!task.due_at) return null;
+                          return (
+                            <li
+                              className="rounded-md border bg-muted/20 p-2.5 text-xs"
+                              key={`task-${task.id}`}
+                            >
+                              <p className="font-medium">{task.title}</p>
+                              <p className="mt-1 text-muted-foreground">
+                                Due {new Date(task.due_at).toLocaleTimeString(undefined, {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })} · {task.status.replace("_", " ")}
+                              </p>
+                            </li>
+                          );
+                        })}
+                        {studyBlocks.map(({ block, index, plan }) => (
+                          <li
+                            className="rounded-md border border-primary/20 bg-primary/5 p-2.5 text-xs"
+                            key={`plan-${plan.id}-${index}`}
+                          >
+                            <p className="font-medium">{block.topic}</p>
+                            <p className="mt-1 text-muted-foreground">
+                              {plan.title} · {block.duration_minutes} min
+                            </p>
+                          </li>
+                        ))}
+                        {dueTasks.length === 0 && studyBlocks.length === 0 && (
+                          <li className="text-xs text-muted-foreground">Nothing scheduled</li>
+                        )}
+                      </ul>
+                    </Card>
+                  );
+                })}
+              </div>
+              {calendarDays.length === 0 && (
+                <p className="mt-4 text-sm text-muted-foreground" role="status">
+                  Preparing your saved schedule…
+                </p>
+              )}
+            </TabsContent>
 
             {/* Tasks Tab */}
             <TabsContent value="planner" className="mt-6">
@@ -505,6 +829,48 @@ export default function LearningContent() {
                               )}
                             </div>
                           </div>
+                          {role === "student" && task.owner_id === null && task.course_id && (
+                            <div className="mt-4 border-t pt-4">
+                              {submissions[task.id] && (
+                                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                                  <Badge variant={submissions[task.id].status === "reviewed" ? "secondary" : "outline"}>
+                                    {submissions[task.id].status === "reviewed" ? "Reviewed" : "Awaiting review"}
+                                  </Badge>
+                                  {submissions[task.id].grade !== null && (
+                                    <span className="font-medium">Grade: {submissions[task.id].grade}/100</span>
+                                  )}
+                                  <span className="text-muted-foreground">
+                                    Submitted {new Date(submissions[task.id].submitted_at).toLocaleString()}
+                                  </span>
+                                </div>
+                              )}
+                              {submissions[task.id]?.feedback && (
+                                <p className="mb-3 rounded-md bg-muted/40 p-3 text-xs leading-relaxed">
+                                  <span className="font-semibold">Professor feedback: </span>
+                                  {submissions[task.id].feedback}
+                                </p>
+                              )}
+                              <form className="space-y-2" onSubmit={(event) => void submitAssignment(event, task)}>
+                                <label className="block text-xs font-medium" htmlFor={`submission-${task.id}`}>
+                                  Assignment response
+                                </label>
+                                <Textarea
+                                  className="min-h-24 text-xs"
+                                  id={`submission-${task.id}`}
+                                  maxLength={20000}
+                                  onChange={(event) => setSubmissionDrafts((current) => ({
+                                    ...current,
+                                    [task.id]: event.target.value,
+                                  }))}
+                                  required
+                                  value={submissionDrafts[task.id] ?? submissions[task.id]?.content ?? ""}
+                                />
+                                <Button size="xs" type="submit">
+                                  {submissions[task.id] ? "Resubmit assignment" : "Submit assignment"}
+                                </Button>
+                              </form>
+                            </div>
+                          )}
                         </Card>
                       </li>
                     ))}
@@ -712,6 +1078,123 @@ export default function LearningContent() {
                     </form>
                   </Card>
                 </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="lessons" className="mt-6">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+                <section className="space-y-4">
+                  <h2 className="text-xl font-semibold text-foreground">Saved AI lessons</h2>
+                  {lessons.length === 0 ? (
+                    <EmptyState
+                      icon={BookOpenText}
+                      title="No lessons yet"
+                      description="Generate a lesson to save it alongside your quizzes and study plans."
+                    />
+                  ) : (
+                    <ul className="space-y-3">
+                      {lessons.map((lesson) => (
+                        <li key={lesson.id}>
+                          <Card className="p-5">
+                            <CardTitle className="text-base font-semibold">{lesson.title}</CardTitle>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Saved {new Date(lesson.created_at).toLocaleString()}
+                            </p>
+                            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                              {lesson.content}
+                            </p>
+                          </Card>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <Card className="h-fit p-5">
+                  <CardTitle className="text-base font-semibold">Generate a lesson</CardTitle>
+                  <CardDescription className="mt-1 text-xs">
+                    Create a focused explanation and keep it in your personal learning library.
+                  </CardDescription>
+                  <form className="mt-4 space-y-3" onSubmit={generateLesson}>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium" htmlFor="lesson-topic">
+                        Topic
+                      </label>
+                      <Textarea
+                        id="lesson-topic"
+                        maxLength={1000}
+                        minLength={3}
+                        onChange={(event) => setLessonTopic(event.target.value)}
+                        placeholder="e.g. Dijkstra's shortest-path algorithm"
+                        required
+                        value={lessonTopic}
+                        className="min-h-24 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium" htmlFor="lesson-course">
+                        Course context
+                      </label>
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        id="lesson-course"
+                        onChange={(event) => setLessonCourseId(event.target.value)}
+                        value={lessonCourseId}
+                      >
+                        <option value="">General study</option>
+                        {courses.map((course) => (
+                          <option key={course.id} value={course.id}>
+                            {course.code} · {course.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button className="w-full" disabled={generatingLesson} type="submit">
+                      {generatingLesson ? "Generating…" : "Generate & save lesson"}
+                    </Button>
+                  </form>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="progress" className="mt-6">
+              <div className="grid gap-5 md:grid-cols-[minmax(14rem,0.7fr)_minmax(0,1.3fr)]">
+                <Card className="p-5">
+                  <CardTitle className="text-base font-semibold">Quiz practice</CardTitle>
+                  <p className="mt-3 text-3xl font-semibold">
+                    {progress?.average_score_percent === null || progress?.average_score_percent === undefined
+                      ? "—"
+                      : `${progress.average_score_percent.toFixed(0)}%`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Average score across your saved attempts</p>
+                  <Badge className="mt-4" variant="secondary">
+                    {progress?.quiz_attempts ?? 0} completed attempt{progress?.quiz_attempts === 1 ? "" : "s"}
+                  </Badge>
+                </Card>
+                <Card className="p-5">
+                  <CardTitle className="text-base font-semibold">Topics to revisit</CardTitle>
+                  <CardDescription className="mt-1 text-xs">
+                    Based on incorrect or unanswered items in your saved quiz attempts.
+                  </CardDescription>
+                  {progress && progress.knowledge_gaps.length > 0 ? (
+                    <ul className="mt-4 space-y-2">
+                      {progress.knowledge_gaps.map((gap) => (
+                        <li
+                          className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 p-3 text-sm"
+                          key={gap.topic}
+                        >
+                          <span className="font-medium">{gap.topic}</span>
+                          <Badge variant="outline">
+                            {gap.missed_questions} missed
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Complete a practice quiz to see which topics may need more review.
+                    </p>
+                  )}
+                </Card>
               </div>
             </TabsContent>
 

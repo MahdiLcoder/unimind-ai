@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from ai.agents.planning import PlannedTask, PlanningResponse
 from ai.agents.schemas import AgentPrincipal, LearningResponse
 from ai.agents.service import AgentService, make_agent_request
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,9 @@ from app.core.database import get_db_session
 from app.core.platform import add_audit_log
 from app.models.academic import (
     AcademicTask,
+    AssignmentSubmission,
     Enrollment,
+    LearningLesson,
     Quiz,
     QuizAttempt,
     QuizQuestion,
@@ -81,6 +83,41 @@ class TaskResponse(BaseModel):
     priority: TaskPriority
     created_at: datetime
     updated_at: datetime
+
+
+class AssignmentSubmissionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=20000)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> AssignmentSubmissionCreate:
+        if not self.content.strip():
+            raise ValueError("content cannot be blank")
+        return self
+
+
+class AssignmentSubmissionReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feedback: str | None = Field(default=None, max_length=4000)
+    grade: int | None = Field(default=None, ge=0, le=100)
+
+
+class AssignmentSubmissionResponse(BaseModel):
+    id: UUID
+    task_id: UUID
+    task_title: str
+    course_id: str
+    student_id: str
+    student_email: str | None
+    content: str
+    status: Literal["submitted", "reviewed"]
+    grade: int | None
+    feedback: str | None
+    submitted_at: datetime
+    reviewed_at: datetime | None
+    reviewed_by: str | None
 
 
 class StudyBlock(BaseModel):
@@ -212,6 +249,35 @@ class FlashcardResponse(BaseModel):
     hint: str
 
 
+class LearningLessonGenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=3, max_length=1000)
+    course_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+
+class LearningLessonResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    owner_id: str
+    course_id: str | None
+    title: str
+    content: str
+    created_at: datetime
+
+
+class KnowledgeGapResponse(BaseModel):
+    topic: str
+    missed_questions: int
+
+
+class LearningProgressResponse(BaseModel):
+    quiz_attempts: int
+    average_score_percent: float | None
+    knowledge_gaps: list[KnowledgeGapResponse]
+
+
 class QuizQuestionResponse(BaseModel):
     id: UUID
     position: int
@@ -283,6 +349,237 @@ async def list_tasks(
         )
         for task, progress_status in tasks
     ]
+
+
+@router.get("/tasks/submissions/mine", response_model=list[AssignmentSubmissionResponse])
+async def list_my_assignment_submissions(
+    student: Annotated[User, Depends(require_roles(UserRole.STUDENT))],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[AssignmentSubmissionResponse]:
+    rows = await session.execute(
+        select(AssignmentSubmission, AcademicTask.title, AcademicTask.course_id)
+        .join(AcademicTask, AcademicTask.id == AssignmentSubmission.task_id)
+        .where(AssignmentSubmission.student_id == student.clerk_user_id)
+        .order_by(AssignmentSubmission.submitted_at.desc(), AssignmentSubmission.id)
+    )
+    return [
+        AssignmentSubmissionResponse(
+            id=submission.id,
+            task_id=submission.task_id,
+            task_title=task_title,
+            course_id=course_id,
+            student_id=submission.student_id,
+            student_email=student.email,
+            content=submission.content,
+            status=submission.status,
+            grade=submission.grade,
+            feedback=submission.feedback,
+            submitted_at=submission.submitted_at,
+            reviewed_at=submission.reviewed_at,
+            reviewed_by=submission.reviewed_by,
+        )
+        for submission, task_title, course_id in rows
+        if course_id is not None
+    ]
+
+
+@router.post(
+    "/tasks/{task_id}/submissions",
+    response_model=AssignmentSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def submit_course_assignment(
+    task_id: UUID,
+    body: AssignmentSubmissionCreate,
+    student: Annotated[User, Depends(require_roles(UserRole.STUDENT))],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AssignmentSubmissionResponse:
+    task = await session.get(AcademicTask, task_id)
+    if task is None or task.owner_id is not None or task.course_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course assignment was not found",
+        )
+    await require_course_access(task.course_id, student, session)
+    submission = await session.scalar(
+        select(AssignmentSubmission).where(
+            AssignmentSubmission.task_id == task_id,
+            AssignmentSubmission.student_id == student.clerk_user_id,
+        )
+    )
+    submitted_at = datetime.now(UTC)
+    if submission is None:
+        submission = AssignmentSubmission(
+            task_id=task_id,
+            student_id=student.clerk_user_id,
+            content=body.content.strip(),
+            status="submitted",
+            submitted_at=submitted_at,
+        )
+        session.add(submission)
+    else:
+        submission.content = body.content.strip()
+        submission.status = "submitted"
+        submission.grade = None
+        submission.feedback = None
+        submission.submitted_at = submitted_at
+        submission.reviewed_at = None
+        submission.reviewed_by = None
+    progress = await session.get(
+        TaskProgress,
+        {"task_id": task_id, "student_id": student.clerk_user_id},
+    )
+    if progress is None:
+        session.add(
+            TaskProgress(
+                task_id=task_id,
+                student_id=student.clerk_user_id,
+                status="in_progress",
+            )
+        )
+    else:
+        progress.status = "in_progress"
+    await session.commit()
+    await session.refresh(submission)
+    return AssignmentSubmissionResponse(
+        id=submission.id,
+        task_id=submission.task_id,
+        task_title=task.title,
+        course_id=task.course_id,
+        student_id=submission.student_id,
+        student_email=student.email,
+        content=submission.content,
+        status=submission.status,
+        grade=submission.grade,
+        feedback=submission.feedback,
+        submitted_at=submission.submitted_at,
+        reviewed_at=submission.reviewed_at,
+        reviewed_by=submission.reviewed_by,
+    )
+
+
+@router.get(
+    "/courses/{course_id}/submissions",
+    response_model=list[AssignmentSubmissionResponse],
+)
+async def list_course_assignment_submissions(
+    course_id: str,
+    professor: Annotated[
+        User, Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMINISTRATOR))
+    ],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    submission_status: Annotated[
+        Literal["submitted", "reviewed"] | None,
+        Query(alias="status"),
+    ] = "submitted",
+) -> list[AssignmentSubmissionResponse]:
+    await require_course_access(course_id, professor, session)
+    query = (
+        select(AssignmentSubmission, AcademicTask.title, User.email)
+        .join(AcademicTask, AcademicTask.id == AssignmentSubmission.task_id)
+        .join(User, User.clerk_user_id == AssignmentSubmission.student_id)
+        .where(AcademicTask.course_id == course_id, AcademicTask.owner_id.is_(None))
+    )
+    if submission_status is not None:
+        query = query.where(AssignmentSubmission.status == submission_status)
+    rows = await session.execute(
+        query.order_by(AssignmentSubmission.submitted_at, AssignmentSubmission.id)
+    )
+    return [
+        AssignmentSubmissionResponse(
+            id=submission.id,
+            task_id=submission.task_id,
+            task_title=task_title,
+            course_id=course_id,
+            student_id=submission.student_id,
+            student_email=email,
+            content=submission.content,
+            status=submission.status,
+            grade=submission.grade,
+            feedback=submission.feedback,
+            submitted_at=submission.submitted_at,
+            reviewed_at=submission.reviewed_at,
+            reviewed_by=submission.reviewed_by,
+        )
+        for submission, task_title, email in rows
+    ]
+
+
+@router.patch(
+    "/courses/{course_id}/submissions/{submission_id}",
+    response_model=AssignmentSubmissionResponse,
+)
+async def review_course_assignment_submission(
+    course_id: str,
+    submission_id: UUID,
+    body: AssignmentSubmissionReview,
+    professor: Annotated[
+        User, Depends(require_roles(UserRole.PROFESSOR, UserRole.ADMINISTRATOR))
+    ],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AssignmentSubmissionResponse:
+    await require_course_access(course_id, professor, session)
+    row = await session.execute(
+        select(AssignmentSubmission, AcademicTask.title)
+        .join(AcademicTask, AcademicTask.id == AssignmentSubmission.task_id)
+        .where(
+            AssignmentSubmission.id == submission_id,
+            AcademicTask.course_id == course_id,
+            AcademicTask.owner_id.is_(None),
+        )
+    )
+    result = row.one_or_none()
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment submission was not found",
+        )
+    submission, task_title = result
+    submission.status = "reviewed"
+    submission.feedback = body.feedback.strip() if body.feedback else None
+    submission.grade = body.grade
+    submission.reviewed_at = datetime.now(UTC)
+    submission.reviewed_by = professor.clerk_user_id
+    progress = await session.get(
+        TaskProgress,
+        {"task_id": submission.task_id, "student_id": submission.student_id},
+    )
+    if progress is None:
+        session.add(
+            TaskProgress(
+                task_id=submission.task_id,
+                student_id=submission.student_id,
+                status="completed",
+            )
+        )
+    else:
+        progress.status = "completed"
+    add_audit_log(
+        session,
+        actor_id=professor.clerk_user_id,
+        action="course_assignment_reviewed",
+        resource_type="assignment_submission",
+        resource_id=str(submission.id),
+        details={"course_id": course_id, "grade": body.grade},
+    )
+    await session.commit()
+    await session.refresh(submission)
+    reviewed_student = await session.get(User, submission.student_id)
+    return AssignmentSubmissionResponse(
+        id=submission.id,
+        task_id=submission.task_id,
+        task_title=task_title,
+        course_id=course_id,
+        student_id=submission.student_id,
+        student_email=reviewed_student.email if reviewed_student else None,
+        content=submission.content,
+        status=submission.status,
+        grade=submission.grade,
+        feedback=submission.feedback,
+        submitted_at=submission.submitted_at,
+        reviewed_at=submission.reviewed_at,
+        reviewed_by=submission.reviewed_by,
+    )
 
 
 @router.post(
@@ -660,6 +957,126 @@ async def list_quizzes(
         await _quiz_response(session, quiz)
         for quiz in quizzes
     ]
+
+
+@router.get("/lessons", response_model=list[LearningLessonResponse])
+async def list_learning_lessons(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[LearningLessonResponse]:
+    lessons = await session.scalars(
+        select(LearningLesson)
+        .where(LearningLesson.owner_id == user.clerk_user_id)
+        .order_by(LearningLesson.created_at.desc(), LearningLesson.id)
+        .limit(limit)
+    )
+    return [LearningLessonResponse.model_validate(lesson) for lesson in lessons]
+
+
+@router.post(
+    "/lessons/generate",
+    response_model=LearningLessonResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_learning_lesson(
+    body: LearningLessonGenerationRequest,
+    service: Annotated[AgentService, Depends(get_agent_service)],
+    principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> LearningLessonResponse:
+    if body.course_id and body.course_id not in principal.allowed_course_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course was not found",
+        )
+
+    topic = body.topic.strip()
+    request = make_agent_request(
+        principal,
+        conversation_id=uuid4(),
+        request_id=uuid4(),
+        course_id=body.course_id,
+        message=(
+            f"Create a clear, accurate personalized lesson about: {topic}. "
+            "Set mode to lesson. Organize the explanation into useful sections, "
+            "include key concepts and a concise worked example when relevant, "
+            "and list any prerequisites. Do not invent course-specific facts."
+        ),
+    )
+    state = await service.invoke_learning(request)
+    raw_learning = state.get("agent_outputs", {}).get("learning", {})
+    try:
+        generated = _learning_response_from_agent_output(raw_learning)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The learning model returned an invalid lesson",
+        ) from exc
+    if generated.mode.casefold() != "lesson" or not generated.response.strip():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The learning model did not return a usable lesson",
+        )
+
+    lesson = LearningLesson(
+        owner_id=principal.user_id,
+        course_id=body.course_id,
+        title=topic[:200],
+        content=generated.response.strip(),
+    )
+    session.add(lesson)
+    await session.commit()
+    await session.refresh(lesson)
+    return LearningLessonResponse.model_validate(lesson)
+
+
+@router.get("/learning/progress", response_model=LearningProgressResponse)
+async def get_learning_progress(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> LearningProgressResponse:
+    rows = await session.execute(
+        select(QuizAttempt, Quiz, QuizQuestion)
+        .join(Quiz, Quiz.id == QuizAttempt.quiz_id)
+        .join(QuizQuestion, QuizQuestion.quiz_id == Quiz.id)
+        .where(QuizAttempt.user_id == user.clerk_user_id)
+        .order_by(QuizAttempt.submitted_at.desc(), QuizAttempt.id)
+    )
+    attempt_totals: dict[UUID, dict[str, int]] = {}
+    missed_by_topic: dict[str, int] = {}
+    for attempt, quiz, question in rows:
+        totals = attempt_totals.setdefault(
+            attempt.id,
+            {"earned": 0, "possible": 0},
+        )
+        answer = attempt.answers.get(str(question.id), "")
+        correct = bool(question.answer_key) and (
+            answer.strip().casefold() == question.answer_key.strip().casefold()
+        )
+        totals["possible"] += question.points
+        if correct:
+            totals["earned"] += question.points
+        else:
+            topic = quiz.title.removeprefix("Practice quiz: ").strip()
+            missed_by_topic[topic] = missed_by_topic.get(topic, 0) + 1
+
+    scores = [
+        totals["earned"] / totals["possible"] * 100
+        for totals in attempt_totals.values()
+        if totals["possible"] > 0
+    ]
+    return LearningProgressResponse(
+        quiz_attempts=len(attempt_totals),
+        average_score_percent=sum(scores) / len(scores) if scores else None,
+        knowledge_gaps=[
+            KnowledgeGapResponse(topic=topic, missed_questions=count)
+            for topic, count in sorted(
+                missed_by_topic.items(),
+                key=lambda entry: (-entry[1], entry[0].casefold()),
+            )
+        ],
+    )
 
 
 @router.post(

@@ -4,19 +4,23 @@ import logging
 import os
 from datetime import datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from ai.agents.research import AcademicPaper, CrossrefSearch
+from ai.agents.schemas import AgentPrincipal
+from ai.agents.service import AgentService, make_agent_request
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.agents import get_agent_principal
 from app.api.auth import get_current_user
+from app.api.dependencies import get_agent_service
 from app.core.database import get_db_session
 from app.core.platform import platform_flag_enabled
-from app.models.academic import ResearchPaper
+from app.models.academic import ResearchPaper, ResearchSearchHistory
 from app.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,32 @@ class ResearchPaperResponse(BaseModel):
     created_at: datetime
 
 
+class ResearchSearchHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    query: str
+    result_count: int
+    created_at: datetime
+
+
+class ResearchCompareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    paper_ids: list[UUID] = Field(min_length=2, max_length=3)
+
+    @field_validator("paper_ids")
+    @classmethod
+    def require_distinct_papers(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("paper_ids must be distinct")
+        return value
+
+
+class ResearchCompareResponse(BaseModel):
+    comparison: str
+
+
 def get_crossref_search() -> CrossrefSearch:
     return CrossrefSearch(mailto=os.getenv("CROSSREF_MAILTO"))
 
@@ -85,10 +115,38 @@ async def search_research_papers(
         await _save_paper(session, user.clerk_user_id, paper)
         for paper in papers
     ]
+    session.add(
+        ResearchSearchHistory(
+            owner_id=user.clerk_user_id,
+            query=body.query,
+            result_count=len(saved),
+        )
+    )
     await session.commit()
     for paper in saved:
         await session.refresh(paper)
     return [ResearchPaperResponse.model_validate(paper) for paper in saved]
+
+
+@router.get(
+    "/search-history",
+    response_model=list[ResearchSearchHistoryResponse],
+)
+async def list_research_search_history(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[ResearchSearchHistoryResponse]:
+    history = await session.scalars(
+        select(ResearchSearchHistory)
+        .where(ResearchSearchHistory.owner_id == user.clerk_user_id)
+        .order_by(ResearchSearchHistory.created_at.desc(), ResearchSearchHistory.id)
+        .limit(limit)
+    )
+    return [
+        ResearchSearchHistoryResponse.model_validate(entry)
+        for entry in history
+    ]
 
 
 @router.get("/papers", response_model=list[ResearchPaperResponse])
@@ -104,6 +162,56 @@ async def list_research_papers(
         .limit(limit)
     )
     return [ResearchPaperResponse.model_validate(paper) for paper in papers]
+
+
+@router.post("/compare", response_model=ResearchCompareResponse)
+async def compare_saved_research_papers(
+    body: ResearchCompareRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
+    service: Annotated[AgentService, Depends(get_agent_service)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ResearchCompareResponse:
+    saved_papers = list(
+        await session.scalars(
+            select(ResearchPaper).where(
+                ResearchPaper.owner_id == user.clerk_user_id,
+                ResearchPaper.id.in_(body.paper_ids),
+            )
+        )
+    )
+    if len(saved_papers) != len(body.paper_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more saved papers were not found",
+        )
+    paper_by_id = {paper.id: paper for paper in saved_papers}
+    papers = [paper_by_id[paper_id] for paper_id in body.paper_ids]
+
+    evidence = []
+    for index, paper in enumerate(papers, start=1):
+        authors = ", ".join(paper.authors[:4])[:120] or "Not listed"
+        abstract = (paper.abstract or "No abstract was saved.")[:400]
+        evidence.append(
+            f"Paper {index}: {paper.title[:300]}\n"
+            f"Authors: {authors}; year: {paper.year or 'unknown'}; "
+            f"DOI: {paper.doi or 'not listed'}\n"
+            f"Abstract: {abstract}"
+        )
+    request = make_agent_request(
+        principal,
+        conversation_id=uuid4(),
+        request_id=uuid4(),
+        message=(
+            "Compare the following saved academic papers using only the supplied "
+            "metadata and abstracts. Summarize each paper's focus, compare shared "
+            "themes and differences, and state what cannot be concluded from the "
+            "available abstracts. Do not invent findings.\n\n"
+            + "\n\n".join(evidence)
+        ),
+    )
+    response = await service.invoke(request)
+    return ResearchCompareResponse(comparison=response.response)
 
 
 @router.delete(

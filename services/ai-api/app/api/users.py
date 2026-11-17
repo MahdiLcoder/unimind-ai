@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,10 +24,38 @@ class UserRoleUpdateRequest(BaseModel):
     role: UserRole
 
 
+class UserProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, max_length=160)
+    university: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=160)
+    program: str | None = Field(default=None, max_length=160)
+
+    @field_validator("display_name", "university", "department", "program")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        normalized = value.strip() if value is not None else None
+        return normalized or None
+
+
 @router.get("/me", response_model=UserProfileResponse)
 async def get_profile(
     user: Annotated[User, Depends(get_current_user)],
 ) -> UserProfileResponse:
+    return UserProfileResponse.model_validate(user)
+
+
+@router.patch("/me", response_model=UserProfileResponse)
+async def update_profile(
+    body: UserProfileUpdateRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> UserProfileResponse:
+    for field in body.model_fields_set:
+        setattr(user, field, getattr(body, field))
+    await session.commit()
+    await session.refresh(user)
     return UserProfileResponse.model_validate(user)
 
 

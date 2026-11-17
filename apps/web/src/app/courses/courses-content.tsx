@@ -22,6 +22,7 @@ import { SiteHeader } from "@/components/site-header";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -73,6 +74,21 @@ const courseDocumentSchema = z.object({
   course_id: z.string().nullable(),
   created_at: z.string(),
 });
+const assignmentSubmissionSchema = z.object({
+  id: z.string().uuid(),
+  task_id: z.string().uuid(),
+  task_title: z.string(),
+  course_id: z.string(),
+  student_id: z.string(),
+  student_email: z.string().nullable(),
+  content: z.string(),
+  status: z.enum(["submitted", "reviewed"]),
+  grade: z.number().nullable(),
+  feedback: z.string().nullable(),
+  submitted_at: z.string(),
+  reviewed_at: z.string().nullable(),
+  reviewed_by: z.string().nullable(),
+});
 const uploadResponseSchema = z.object({
   id: z.string().uuid(),
   source_filename: z.string(),
@@ -98,6 +114,7 @@ const overviewSchema = z.object({
   assignment_completions: z.number(),
   quiz_attempts: z.number(),
   average_quiz_score_percent: z.number().nullable(),
+  pending_submissions_count: z.number(),
 });
 
 type Course = z.infer<typeof courseSchema>;
@@ -121,6 +138,9 @@ export default function CoursesContent() {
   const [courseCode, setCourseCode] = useState("");
   const [courseName, setCourseName] = useState("");
   const [courseDocuments, setCourseDocuments] = useState<z.infer<typeof courseDocumentSchema>[]>([]);
+  const [submissions, setSubmissions] = useState<Record<string, z.infer<typeof assignmentSubmissionSchema>[]>>({});
+  const [reviewFeedback, setReviewFeedback] = useState<Record<string, string>>({});
+  const [reviewGrades, setReviewGrades] = useState<Record<string, string>>({});
   const [materialCourseId, setMaterialCourseId] = useState("");
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
   const [assignmentTitles, setAssignmentTitles] = useState<Record<string, string>>({});
@@ -348,6 +368,60 @@ export default function CoursesContent() {
     }
   }
 
+  async function showSubmissions(course: Course) {
+    setError(null);
+    try {
+      const token = await accessToken();
+      const result = await apiRequest(
+        `/api/v1/courses/${course.id}/submissions?status=submitted`,
+        z.array(assignmentSubmissionSchema),
+        { accessToken: token }
+      );
+      setSubmissions((current) => ({ ...current, [course.id]: result }));
+      toast.info(`Loaded ${result.length} submissions awaiting review`);
+    } catch (cause) {
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function reviewSubmission(
+    event: FormEvent<HTMLFormElement>,
+    course: Course,
+    submission: z.infer<typeof assignmentSubmissionSchema>
+  ) {
+    event.preventDefault();
+    setError(null);
+    try {
+      const token = await accessToken();
+      const gradeText = reviewGrades[submission.id];
+      const reviewed = await apiRequest(
+        `/api/v1/courses/${course.id}/submissions/${submission.id}`,
+        assignmentSubmissionSchema,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            feedback: reviewFeedback[submission.id] || null,
+            grade: gradeText ? Number(gradeText) : null,
+          }),
+          accessToken: token,
+        }
+      );
+      setSubmissions((current) => ({
+        ...current,
+        [course.id]: (current[course.id] ?? []).filter((item) => item.id !== reviewed.id),
+      }));
+      toast.success(`Reviewed ${submission.task_title}`);
+      await showOverview(course);
+    } catch (cause) {
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
   async function createAssignment(event: FormEvent<HTMLFormElement>, course: Course) {
     event.preventDefault();
     setError(null);
@@ -544,6 +618,14 @@ export default function CoursesContent() {
                               <Button
                                 size="xs"
                                 variant="outline"
+                                onClick={() => void showSubmissions(course)}
+                                type="button"
+                              >
+                                Review submissions
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="outline"
                                 onClick={() => void showRoster(course)}
                                 type="button"
                               >
@@ -587,7 +669,86 @@ export default function CoursesContent() {
                                       : `${Math.round(overviews[course.id].average_quiz_score_percent ?? 0)}%`}
                                   </dd>
                                 </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Awaiting review</dt>
+                                  <dd className="font-semibold text-foreground">
+                                    {overviews[course.id].pending_submissions_count}
+                                  </dd>
+                                </div>
                               </dl>
+                            )}
+
+                            {submissions[course.id] && (
+                              <section aria-label={`Submissions awaiting review for ${course.code}`} className="space-y-3">
+                                <h4 className="text-xs font-semibold">
+                                  Submissions awaiting review ({submissions[course.id].length})
+                                </h4>
+                                {submissions[course.id].map((submission) => (
+                                  <article className="rounded-md border p-3" key={submission.id}>
+                                    <div className="flex flex-wrap justify-between gap-2">
+                                      <div>
+                                        <p className="text-sm font-medium">{submission.task_title}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {submission.student_email ?? submission.student_id}
+                                          {" · "}{new Date(submission.submitted_at).toLocaleString()}
+                                        </p>
+                                      </div>
+                                      {submission.student_email && (
+                                        <p className="max-w-40 break-all font-mono text-[10px] text-muted-foreground">
+                                          {submission.student_id}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <p className="mt-3 whitespace-pre-wrap rounded bg-muted/30 p-3 text-xs leading-relaxed">
+                                      {submission.content}
+                                    </p>
+                                    <form
+                                      className="mt-3 grid gap-2 sm:grid-cols-[1fr_6rem_auto]"
+                                      onSubmit={(event) => void reviewSubmission(event, course, submission)}
+                                    >
+                                      <label className="sr-only" htmlFor={`feedback-${submission.id}`}>
+                                        Feedback for {submission.task_title}
+                                      </label>
+                                      <Textarea
+                                        className="min-h-16 text-xs sm:col-span-3"
+                                        id={`feedback-${submission.id}`}
+                                        maxLength={4000}
+                                        onChange={(event) => setReviewFeedback((current) => ({
+                                          ...current,
+                                          [submission.id]: event.target.value,
+                                        }))}
+                                        placeholder="Feedback for the student (optional)"
+                                        value={reviewFeedback[submission.id] ?? ""}
+                                      />
+                                      <label className="sr-only" htmlFor={`grade-${submission.id}`}>
+                                        Grade out of 100
+                                      </label>
+                                      <Input
+                                        className="h-8 text-xs"
+                                        id={`grade-${submission.id}`}
+                                        max={100}
+                                        min={0}
+                                        onChange={(event) => setReviewGrades((current) => ({
+                                          ...current,
+                                          [submission.id]: event.target.value,
+                                        }))}
+                                        placeholder="Grade /100"
+                                        type="number"
+                                        value={reviewGrades[submission.id] ?? ""}
+                                      />
+                                      <span className="hidden sm:block" />
+                                      <Button className="sm:col-start-3" size="xs" type="submit">
+                                        Mark reviewed
+                                      </Button>
+                                    </form>
+                                  </article>
+                                ))}
+                                {submissions[course.id].length === 0 && (
+                                  <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                                    No submissions are awaiting review.
+                                  </p>
+                                )}
+                              </section>
                             )}
 
                             {rosters[course.id] && (

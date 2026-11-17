@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton, useAuth } from "@clerk/nextjs";
+import { useTheme } from "next-themes";
 import { useState, Suspense } from "react";
 import {
   LayoutDashboard,
@@ -14,6 +15,8 @@ import {
   Shield,
   Menu,
   Eye,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +49,9 @@ const navItems: NavItem[] = [
 function SiteHeaderContent() {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
+  const { resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
+  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60">
@@ -116,6 +121,16 @@ function SiteHeaderContent() {
 
         {/* Right side controls */}
         <div className="flex items-center gap-3">
+          <button
+            aria-label="Toggle color theme"
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={toggleTheme}
+            title="Toggle color theme"
+            type="button"
+          >
+            <Sun className="size-4 dark:hidden" />
+            <Moon className="hidden size-4 dark:block" />
+          </button>
           {isSignedIn ? (
             <UserButton
               appearance={{

@@ -198,6 +198,48 @@ class TaskProgress(Base):
     )
 
 
+class AssignmentSubmission(Base):
+    __tablename__ = "assignment_submissions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('submitted', 'reviewed')",
+            name="ck_assignment_submissions_status",
+        ),
+        CheckConstraint(
+            "grade IS NULL OR (grade >= 0 AND grade <= 100)",
+            name="ck_assignment_submissions_grade",
+        ),
+        UniqueConstraint("task_id", "student_id", name="uq_assignment_submissions_task_student"),
+        Index("ix_assignment_submissions_task_status", "task_id", "status"),
+        Index("ix_assignment_submissions_student_submitted", "student_id", "submitted_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    student_id: Mapped[str] = mapped_column(
+        String(255),
+        ForeignKey("users.clerk_user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'submitted'")
+    )
+    grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(
+        String(255), ForeignKey("users.clerk_user_id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class StudyPlan(Base):
     __tablename__ = "study_plans"
     __table_args__ = (
@@ -232,6 +274,28 @@ class StudyPlan(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class LearningLesson(Base):
+    __tablename__ = "learning_lessons"
+    __table_args__ = (
+        Index("ix_learning_lessons_owner_created", "owner_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(
+        String(255),
+        ForeignKey("users.clerk_user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[str | None] = mapped_column(
+        ForeignKey("courses.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
@@ -326,6 +390,25 @@ class ResearchPaper(Base):
     )
     doi: Mapped[str | None] = mapped_column(String(255), nullable=True)
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResearchSearchHistory(Base):
+    __tablename__ = "research_search_history"
+    __table_args__ = (
+        Index("ix_research_search_history_owner_created", "owner_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    owner_id: Mapped[str] = mapped_column(
+        String(255),
+        ForeignKey("users.clerk_user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    query: Mapped[str] = mapped_column(String(300), nullable=False)
+    result_count: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

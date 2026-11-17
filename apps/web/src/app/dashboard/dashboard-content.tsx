@@ -2,7 +2,7 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -42,6 +43,10 @@ const userProfileSchema = z.object({
   clerk_user_id: z.string(),
   email: z.string().nullable(),
   role: z.enum(["student", "professor", "administrator"]),
+  display_name: z.string().nullable(),
+  university: z.string().nullable(),
+  department: z.string().nullable(),
+  program: z.string().nullable(),
   created_at: z.string(),
 });
 const dashboardSummarySchema = z.object({
@@ -101,6 +106,7 @@ const courseLearningOverviewSchema = z.object({
   assignment_completions: z.number(),
   quiz_attempts: z.number(),
   average_quiz_score_percent: z.number().nullable(),
+  pending_submissions_count: z.number(),
 });
 
 type UserProfile = z.infer<typeof userProfileSchema>;
@@ -125,6 +131,12 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [notifications, setNotifications] = useState<Notifications | null>(null);
   const [teachingMetrics, setTeachingMetrics] = useState<TeachingMetrics | null>(null);
+  const [profileDraft, setProfileDraft] = useState({
+    display_name: "",
+    university: "",
+    department: "",
+    program: "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
@@ -144,6 +156,12 @@ export default function DashboardPage() {
       .then(async ([currentUser, currentSummary, currentNotifications]) => {
         if (active) {
           setProfile(currentUser);
+          setProfileDraft({
+            display_name: currentUser.display_name ?? "",
+            university: currentUser.university ?? "",
+            department: currentUser.department ?? "",
+            program: currentUser.program ?? "",
+          });
           setSummary(currentSummary);
           setNotifications(currentNotifications);
         }
@@ -173,7 +191,7 @@ export default function DashboardPage() {
             setTeachingMetrics({
               enrolledStudents: overviews.reduce((total, item) => total + item.active_students, 0),
               pendingAssignments: overviews.reduce(
-                (total, item) => total + Math.max(0, item.assignments * item.active_students - item.assignment_completions),
+                (total, item) => total + item.pending_submissions_count,
                 0
               ),
               averageQuizScore: quizAttempts > 0 ? weightedQuizScore / quizAttempts : null,
@@ -216,6 +234,31 @@ export default function DashboardPage() {
       const err = cause instanceof Error ? cause.message : "Could not update notification";
       setError(err);
       toast.error(err);
+    }
+  }
+
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      const accessToken = await getToken();
+      if (!accessToken) throw new Error("No active session token was returned");
+      const updatedProfile = await apiRequest(
+        "/api/v1/users/me",
+        userProfileSchema,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(profileDraft),
+          accessToken,
+        }
+      );
+      setProfile(updatedProfile);
+      toast.success("Profile saved");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not save your profile";
+      setError(message);
+      toast.error(message);
     }
   }
 
@@ -699,6 +742,48 @@ export default function DashboardPage() {
               </TabsContent>
             </Tabs>
           </section>
+        )}
+        {profile && (
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">Academic profile</CardTitle>
+              <CardDescription className="text-xs">
+                These app-owned details personalize the university experience. Clerk continues to manage your sign-in and email.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 sm:grid-cols-2" onSubmit={saveProfile}>
+                {(
+                  [
+                    ["display_name", "Display name", 160],
+                    ["university", "University", 200],
+                    ["department", "Department", 160],
+                    ["program", "Program", 160],
+                  ] as const
+                ).map(([field, label, maxLength]) => (
+                  <div key={field}>
+                    <label className="mb-1.5 block text-xs font-medium" htmlFor={`profile-${field}`}>
+                      {label}
+                    </label>
+                    <Input
+                      id={`profile-${field}`}
+                      maxLength={maxLength}
+                      onChange={(event) =>
+                        setProfileDraft((current) => ({
+                          ...current,
+                          [field]: event.target.value,
+                        }))
+                      }
+                      value={profileDraft[field]}
+                    />
+                  </div>
+                ))}
+                <div className="sm:col-span-2">
+                  <Button type="submit">Save profile</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         )}
       </main>
     </div>
