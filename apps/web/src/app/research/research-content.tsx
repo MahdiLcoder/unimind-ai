@@ -36,6 +36,7 @@ const paperSchema = z.object({
   external_id: z.string().nullable(),
   title: z.string(),
   abstract: z.string().nullable(),
+  summary: z.string().nullable(),
   year: z.number().nullable(),
   authors: z.array(z.string()),
   doi: z.string().nullable(),
@@ -86,6 +87,7 @@ export default function ResearchContent() {
   const [review, setReview] = useState<string | null>(null);
   const [comparison, setComparison] = useState<string | null>(null);
   const [copiedDoi, setCopiedDoi] = useState<string | null>(null);
+  const [summaryBusyId, setSummaryBusyId] = useState<string | null>(null);
 
   const accessToken = useCallback(async () => {
     const token = await getToken();
@@ -171,6 +173,31 @@ export default function ResearchContent() {
       toast.error(err);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function summarizePaper(paper: Paper) {
+    setError(null);
+    setSummaryBusyId(paper.id);
+    try {
+      const token = await accessToken();
+      const result = await apiRequest(
+        `/api/v1/research/papers/${paper.id}/summary`,
+        z.object({ summary: z.string() }),
+        { method: "POST", accessToken: token }
+      );
+      setPapers((current) =>
+        current.map((entry) =>
+          entry.id === paper.id ? { ...entry, summary: result.summary } : entry
+        )
+      );
+      toast.success("Paper summary generated and saved");
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setSummaryBusyId(null);
     }
   }
 
@@ -360,6 +387,19 @@ export default function ResearchContent() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          disabled={summaryBusyId === paper.id}
+                          onClick={() => void summarizePaper(paper)}
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                        >
+                          {summaryBusyId === paper.id
+                            ? "Summarizing…"
+                            : paper.summary
+                              ? "Regenerate summary"
+                              : "Summarize"}
+                        </Button>
                         <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                           <input
                             aria-label={`Select ${paper.title} for comparison`}
@@ -412,6 +452,14 @@ export default function ResearchContent() {
                       <p className="mt-3 text-xs leading-relaxed text-muted-foreground bg-muted/20 p-3 rounded-lg">
                         {paper.abstract}
                       </p>
+                    )}
+                    {paper.summary && (
+                      <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                        <h4 className="text-xs font-semibold text-foreground">AI summary</h4>
+                        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                          {paper.summary}
+                        </p>
+                      </div>
                     )}
 
                     {comparison && (

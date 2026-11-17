@@ -152,7 +152,10 @@ async def dashboard_summary(
                         0,
                     )
                 ),
-            ).where(QuizAttempt.user_id == user.clerk_user_id)
+            ).where(
+                QuizAttempt.user_id == user.clerk_user_id,
+                QuizAttempt.status == "submitted",
+            )
         )
     ).one()
     run_rows = (

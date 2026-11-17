@@ -187,7 +187,8 @@ trusted. The Python RAG service accepts trusted `owner_id` and
 
 The authenticated application includes workspace and course management,
 student enrollment, professor course assignments and quizzes, task tracking,
-AI-generated quizzes and capacity-bounded study plans, Crossref paper search
+AI-generated practice quizzes and timed mock exams, adaptive study-plan
+rescheduling, Crossref paper search
 and a per-user saved bibliography, and a Coding Agent interface for tutoring,
 generation, review, debugging, and challenge feedback. `CROSSREF_MAILTO` is an
 optional contact address for polite Crossref API usage. Role changes are
@@ -198,8 +199,9 @@ The Learning Studio also persists AI-generated lessons per user. Its current
 learning API behavior and persistence boundaries are documented in
 [Learning and planning API](docs/api/learning.md); flashcard generation remains
 session-only.
-Crossref searches are retained as per-user history, and selected saved papers
-can be compared from their saved metadata and abstracts. See
+Crossref searches are retained as per-user history, saved papers can receive
+metadata-and-abstract summaries, and selected saved papers can be compared.
+See
 [Research API](docs/api/research.md) for the routes and evidence limitations.
 The dashboard also allows users to edit app-owned academic profile fields;
 Clerk remains responsible for authentication and email. See

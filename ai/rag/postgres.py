@@ -5,13 +5,13 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.models.documents import EMBEDDING_DIMENSIONS, Document, DocumentChunk
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from ai.rag.chunking import Chunk
 from ai.rag.ingestion import ExtractedDocument
+from app.models.documents import EMBEDDING_DIMENSIONS, Document, DocumentChunk
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   FolderKanban,
@@ -91,8 +91,16 @@ const faqs = [
   },
 ];
 
+function subscribeToYear(): () => void {
+  return () => {};
+}
+
+function getCurrentYear(): number {
+  return new Date().getFullYear();
+}
+
 export default function Home() {
-  const [year] = useState(() => new Date().getFullYear());
+  const year = useSyncExternalStore(subscribeToYear, getCurrentYear, () => null);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">

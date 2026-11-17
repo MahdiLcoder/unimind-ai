@@ -23,11 +23,12 @@ class ResearchSession:
     def __init__(self) -> None:
         self.added: list[object] = []
         self.papers: list[ResearchPaper] = []
+        self.scalar_result: ResearchPaper | None = None
         self.statement = None
 
-    async def scalar(self, statement: object) -> None:
+    async def scalar(self, statement: object) -> ResearchPaper | None:
         self.statement = statement
-        return None
+        return self.scalar_result
 
     def add(self, item: object) -> None:
         self.added.append(item)
@@ -275,3 +276,54 @@ def test_compare_uses_only_saved_paper_metadata_and_abstracts() -> None:
     message = comparison_service.request.message
     assert message.index("First saved paper") < message.index("Second saved paper")
     assert "Evidence from the first study." in message
+
+
+def test_saved_paper_summary_uses_owned_metadata_and_persists_result() -> None:
+    paper = ResearchPaper(
+        id=uuid4(),
+        owner_id="student-1",
+        title="A grounded study",
+        authors=["A. Author"],
+        abstract="An abstract with the evidence to summarize.",
+        year=2025,
+    )
+    session = ResearchSession()
+    session.scalar_result = paper
+    service = FakeComparisonService()
+
+    async def override_session():
+        yield cast(AsyncSession, session)
+
+    app.dependency_overrides[get_current_user] = _user
+    app.dependency_overrides[get_agent_principal] = lambda: AgentPrincipal(
+        user_id="student-1",
+        role=AgentUserRole.STUDENT,
+    )
+    app.dependency_overrides[get_agent_service] = lambda: service
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            response = client.post(f"/api/v1/research/papers/{paper.id}/summary")
+    finally:
+        _clear_overrides()
+        app.dependency_overrides.pop(get_agent_principal, None)
+        app.dependency_overrides.pop(get_agent_service, None)
+
+    assert response.status_code == 200
+    assert response.json()["summary"] == (
+        "The saved papers share a topic and differ in their method."
+    )
+    assert paper.summary == response.json()["summary"]
+    assert "do not infer unreported results" in service.request.message
+    assert "An abstract with the evidence to summarize." in service.request.message
+
+
+def test_saved_paper_summary_returns_not_found_for_unowned_paper() -> None:
+    session = ResearchSession()
+    try:
+        with _client(session, FakeResearchSearch()) as client:
+            response = client.post(f"/api/v1/research/papers/{uuid4()}/summary")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 404

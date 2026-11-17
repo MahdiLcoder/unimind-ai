@@ -95,6 +95,15 @@ describe("AdminContent Component", () => {
           },
         ];
       }
+      if (endpoint.startsWith("/api/v1/admin/agent-runs?")) {
+        return {
+          items: [],
+          total_count: 0,
+          running_count: 0,
+          completed_count: 0,
+          failed_count: 0,
+        };
+      }
       return {} as never;
     });
 
@@ -141,6 +150,15 @@ describe("AdminContent Component", () => {
       if (endpoint === "/api/v1/admin/features") return { features: [] };
       if (endpoint === "/api/v1/admin/workspaces?limit=100") return [];
       if (endpoint === "/api/v1/admin/audit-logs?limit=100") return [];
+      if (endpoint.startsWith("/api/v1/admin/agent-runs?")) {
+        return {
+          items: [],
+          total_count: 0,
+          running_count: 0,
+          completed_count: 0,
+          failed_count: 0,
+        };
+      }
       if (endpoint === "/api/v1/users/user_student/role") {
         return {
           clerk_user_id: "user_student",

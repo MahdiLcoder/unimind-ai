@@ -6,6 +6,7 @@ import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { QueryProvider } from "@/components/query-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,8 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           appearance={{ theme: shadcn }}
         >
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-            {children}
-            <Toaster position="top-right" />
+            <QueryProvider>
+              {children}
+              <Toaster position="top-right" />
+            </QueryProvider>
           </ThemeProvider>
         </ClerkProvider>
       </body>

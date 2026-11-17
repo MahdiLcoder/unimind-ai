@@ -18,9 +18,12 @@ from app.api.dependencies import get_agent_service
 from app.api.learning import (
     QuestionCreate,
     QuizQuestionResponse,
+    StudyBlock,
     StudyPlanCreate,
     StudyPlanGenerationRequest,
     _learning_response_from_agent_output,
+    _mock_exam_attempt_expired,
+    _reschedule_overdue_blocks,
     _schedule_study_plan,
     _validated_quiz_questions,
 )
@@ -174,6 +177,35 @@ class LearningProgressSession:
     async def execute(self, statement: object) -> list[tuple[QuizAttempt, Quiz, QuizQuestion]]:
         self.statement = statement
         return self.rows
+
+
+class MockExamSession:
+    def __init__(self, quiz: Quiz, questions: list[QuizQuestion]) -> None:
+        self.quiz = quiz
+        self.questions = questions
+        self.attempt: QuizAttempt | None = None
+
+    async def get(self, model: type, key: object) -> object | None:
+        if model is Quiz:
+            return self.quiz if key == self.quiz.id else None
+        raise AssertionError(f"Unexpected model lookup: {model.__name__}")
+
+    def add(self, item: object) -> None:
+        if isinstance(item, QuizAttempt):
+            self.attempt = item
+
+    async def scalar(self, _statement: object) -> QuizAttempt | None:
+        return self.attempt
+
+    async def scalars(self, _statement: object) -> list[QuizQuestion]:
+        return self.questions
+
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, attempt: QuizAttempt) -> None:
+        attempt.id = attempt.id or uuid4()
+        attempt.submitted_at = datetime.now(UTC)
 
 
 class LessonGenerationService:
@@ -650,6 +682,221 @@ def test_generated_study_plan_reports_work_that_does_not_fit() -> None:
 
     assert sum(block.duration_minutes for block in blocks) == 120
     assert unscheduled == ["Long topic (180 minutes)"]
+
+
+def test_adaptive_rescheduling_moves_only_overdue_incomplete_blocks_within_capacity() -> None:
+    today = datetime(2026, 11, 17, tzinfo=UTC).date()
+    current = [
+        StudyBlock(
+            day=today - timedelta(days=2),
+            topic="Overdue review",
+            duration_minutes=64,
+        ),
+        StudyBlock(
+            day=today - timedelta(days=1),
+            topic="Completed review",
+            duration_minutes=30,
+            completed=True,
+        ),
+        StudyBlock(
+            day=today,
+            topic="Today's plan",
+            duration_minutes=45,
+        ),
+    ]
+
+    updated, moved_count, unscheduled = _reschedule_overdue_blocks(
+        current,
+        today=today,
+        starts_on=None,
+        ends_on=today + timedelta(days=2),
+        available_minutes_per_day=60,
+    )
+
+    moved = [block for block in updated if block.topic == "Overdue review"]
+    assert [(block.day, block.duration_minutes) for block in moved] == [
+        (today, 15),
+        (today + timedelta(days=1), 49),
+    ]
+    assert next(block for block in updated if block.topic == "Completed review").day == (
+        today - timedelta(days=1)
+    )
+    assert next(block for block in updated if block.topic == "Today's plan").day == today
+    assert moved_count == 1
+    assert unscheduled == 0
+
+
+def test_adaptive_rescheduling_keeps_work_when_plan_has_no_capacity() -> None:
+    today = datetime(2026, 11, 17, tzinfo=UTC).date()
+    overdue = StudyBlock(
+        day=today - timedelta(days=1),
+        topic="Review",
+        duration_minutes=45,
+    )
+    fixed = StudyBlock(
+        day=today,
+        topic="Existing schedule",
+        duration_minutes=60,
+    )
+
+    updated, moved_count, unscheduled = _reschedule_overdue_blocks(
+        [overdue, fixed],
+        today=today,
+        starts_on=None,
+        ends_on=today,
+        available_minutes_per_day=60,
+    )
+
+    assert overdue in updated
+    assert fixed in updated
+    assert moved_count == 0
+    assert unscheduled == 45
+
+
+def test_adaptive_rescheduling_skips_capacity_smaller_than_minimum_block() -> None:
+    today = datetime(2026, 11, 17, tzinfo=UTC).date()
+    overdue = StudyBlock(
+        day=today - timedelta(days=1),
+        topic="Review",
+        duration_minutes=10,
+    )
+    existing = StudyBlock(
+        day=today,
+        topic="Existing schedule",
+        duration_minutes=11,
+    )
+
+    updated, moved_count, unscheduled = _reschedule_overdue_blocks(
+        [overdue, existing],
+        today=today,
+        starts_on=None,
+        ends_on=today + timedelta(days=1),
+        available_minutes_per_day=15,
+    )
+
+    moved = [block for block in updated if block.topic == "Review"]
+    assert [(block.day, block.duration_minutes) for block in moved] == [
+        (today + timedelta(days=1), 10),
+    ]
+    assert moved_count == 1
+    assert unscheduled == 0
+
+
+def test_mock_exam_attempt_expiry_uses_server_start_time_and_duration() -> None:
+    started_at = datetime.now(UTC)
+    quiz = Quiz(
+        creator_id="professor-1",
+        title="Midterm",
+        assessment_type="mock_exam",
+        duration_minutes=30,
+    )
+    attempt = QuizAttempt(
+        quiz_id=uuid4(),
+        user_id="student-1",
+        answers={},
+        status="in_progress",
+        started_at=started_at,
+    )
+
+    assert not _mock_exam_attempt_expired(
+        quiz,
+        attempt,
+        started_at + timedelta(minutes=29, seconds=59),
+    )
+    assert _mock_exam_attempt_expired(
+        quiz,
+        attempt,
+        started_at + timedelta(minutes=30),
+    )
+
+
+def test_mock_exam_attempt_start_and_submission_are_server_timed() -> None:
+    quiz_id = uuid4()
+    question_id = uuid4()
+    quiz = Quiz(
+        id=quiz_id,
+        creator_id="student-1",
+        title="Midterm",
+        assessment_type="mock_exam",
+        duration_minutes=30,
+    )
+    question = QuizQuestion(
+        id=question_id,
+        quiz_id=quiz_id,
+        position=0,
+        prompt="What is 2 + 2?",
+        options=["3", "4"],
+        answer_key="4",
+        points=1,
+    )
+    session = MockExamSession(quiz, [question])
+
+    async def override_session():
+        yield cast(AsyncSession, session)
+
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            started = client.post(f"/api/v1/quizzes/{quiz_id}/attempts/start")
+            assert started.status_code == 201
+            attempt_id = started.json()["id"]
+            assert session.attempt is not None
+            assert session.attempt.status == "in_progress"
+
+            submitted = client.post(
+                f"/api/v1/quizzes/{quiz_id}/attempts",
+                json={
+                    "attempt_id": attempt_id,
+                    "answers": {str(question_id): "4"},
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert submitted.status_code == 201
+    assert submitted.json()["score"] == 1
+    assert session.attempt is not None
+    assert session.attempt.status == "submitted"
+
+
+def test_expired_mock_exam_attempt_cannot_be_submitted() -> None:
+    quiz_id = uuid4()
+    quiz = Quiz(
+        id=quiz_id,
+        creator_id="student-1",
+        title="Midterm",
+        assessment_type="mock_exam",
+        duration_minutes=30,
+    )
+    session = MockExamSession(quiz, [])
+    session.attempt = QuizAttempt(
+        id=uuid4(),
+        quiz_id=quiz_id,
+        user_id="student-1",
+        answers={},
+        status="in_progress",
+        started_at=datetime.now(UTC) - timedelta(minutes=31),
+    )
+
+    async def override_session():
+        yield cast(AsyncSession, session)
+
+    app.dependency_overrides[get_current_user] = lambda: _user()
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/v1/quizzes/{quiz_id}/attempts",
+                json={"attempt_id": str(session.attempt.id), "answers": {}},
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_db_session, None)
+
+    assert response.status_code == 409
+    assert session.attempt.status == "expired"
 
 
 def test_multiple_choice_answer_must_be_one_of_the_options() -> None:

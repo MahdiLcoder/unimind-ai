@@ -260,10 +260,10 @@ class PostgresAgentEventStore:
         user_id: str,
         conversation_id: UUID,
     ) -> list[AgentStreamEvent]:
-        from app.models.agent_events import AgentExecutionEvent
         from sqlalchemy import select
 
         from ai.agents.schemas import AgentName
+        from app.models.agent_events import AgentExecutionEvent
 
         async with self.session_factory() as session:
             rows = (

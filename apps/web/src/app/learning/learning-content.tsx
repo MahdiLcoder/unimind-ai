@@ -2,6 +2,15 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   type FormEvent,
   useCallback,
   useEffect,
@@ -69,6 +78,7 @@ const studyPlanSchema = z.object({
       course_id: z.string().nullable(),
       priority: z.string().nullable(),
       rationale: z.string().nullable(),
+      completed: z.boolean().default(false),
     })
   ),
   status: z.enum(["active", "completed", "archived"]),
@@ -89,6 +99,8 @@ const quizSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
   published: z.boolean(),
+  assessment_type: z.enum(["practice", "mock_exam"]),
+  duration_minutes: z.number().nullable(),
   created_at: z.string(),
   questions: z.array(quizQuestionSchema),
 });
@@ -108,6 +120,11 @@ const quizAttemptSchema = z.object({
       total_points: z.number(),
     })
   ),
+});
+const quizExamAttemptSchema = z.object({
+  id: z.string().uuid(),
+  started_at: z.string(),
+  expires_at: z.string(),
 });
 const userProfileSchema = z.object({
   role: z.enum(["student", "professor", "administrator"]),
@@ -196,6 +213,10 @@ export default function LearningContent() {
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [examAttemptId, setExamAttemptId] = useState<string | null>(null);
+  const [examExpiresAt, setExamExpiresAt] = useState<string | null>(null);
+  const [examSecondsRemaining, setExamSecondsRemaining] = useState<number | null>(null);
+  const [submittingAttempt, setSubmittingAttempt] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDue, setTaskDue] = useState("");
   const [planTitle, setPlanTitle] = useState("");
@@ -206,6 +227,8 @@ export default function LearningContent() {
   const [planningContext, setPlanningContext] = useState("");
   const [quizTopic, setQuizTopic] = useState("");
   const [questionCount, setQuestionCount] = useState(5);
+  const [assessmentType, setAssessmentType] = useState<"practice" | "mock_exam">("practice");
+  const [examDurationMinutes, setExamDurationMinutes] = useState(90);
   const [quizCourseId, setQuizCourseId] = useState("");
   const [quizPublished, setQuizPublished] = useState(false);
   const [lessonTopic, setLessonTopic] = useState("");
@@ -320,6 +343,70 @@ export default function LearningContent() {
     setSubmissions(Object.fromEntries(submissionList.map((submission) => [submission.task_id, submission])));
   }, [token]);
 
+  async function activateQuiz(quiz: Quiz) {
+    setActiveQuiz(quiz);
+    setAnswers({});
+    setAttempt(null);
+    setExamAttemptId(null);
+    setExamExpiresAt(null);
+    setExamSecondsRemaining(null);
+    if (quiz.assessment_type === "mock_exam") {
+      try {
+        const accessToken = await token();
+        const started = await apiRequest(
+          `/api/v1/quizzes/${quiz.id}/attempts/start`,
+          quizExamAttemptSchema,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+            accessToken,
+          }
+        );
+        setExamAttemptId(started.id);
+        setExamExpiresAt(started.expires_at);
+      } catch (cause) {
+        const err = message(cause);
+        setError(err);
+        toast.error(err);
+      }
+    }
+  }
+
+  const submitQuizAnswers = useCallback(async () => {
+    if (!activeQuiz || submittingAttempt) return;
+    setError(null);
+    setSubmittingAttempt(true);
+    try {
+      const accessToken = await token();
+      const result = await apiRequest(
+        `/api/v1/quizzes/${activeQuiz.id}/attempts`,
+        quizAttemptSchema,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers,
+            ...(activeQuiz.assessment_type === "mock_exam"
+              ? { attempt_id: examAttemptId }
+              : {}),
+          }),
+          accessToken,
+        }
+      );
+      setAttempt(result);
+      setExamAttemptId(null);
+      toast.success(`Quiz completed! Score: ${result.score} / ${result.total_points}`);
+      await load();
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setSubmittingAttempt(false);
+    }
+  }, [activeQuiz, answers, examAttemptId, load, submittingAttempt, token]);
+
   useEffect(() => {
     let active = true;
     void Promise.resolve()
@@ -338,6 +425,39 @@ export default function LearningContent() {
       active = false;
     };
   }, [load]);
+
+  useEffect(() => {
+    if (!examExpiresAt || attempt) return;
+    const updateRemaining = () => {
+      setExamSecondsRemaining(
+        Math.max(0, Math.ceil((Date.parse(examExpiresAt) - Date.now()) / 1000))
+      );
+    };
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(interval);
+  }, [attempt, examExpiresAt]);
+
+  useEffect(() => {
+    if (
+      examSecondsRemaining === 0 &&
+      examAttemptId &&
+      !attempt &&
+      !submittingAttempt
+    ) {
+      const timeout = window.setTimeout(() => {
+        void submitQuizAnswers();
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+    return undefined;
+  }, [
+    attempt,
+    examAttemptId,
+    examSecondsRemaining,
+    submittingAttempt,
+    submitQuizAnswers,
+  ]);
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -377,6 +497,66 @@ export default function LearningContent() {
       });
       toast.success(`Task marked as ${status}`);
       await load();
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function setStudyBlockCompletion(
+    plan: StudyPlan,
+    blockIndex: number,
+    completed: boolean
+  ) {
+    setError(null);
+    try {
+      const accessToken = await token();
+      const schedule = plan.schedule.map((block, index) =>
+        index === blockIndex ? { ...block, completed } : block
+      );
+      const updated = await apiRequest(
+        `/api/v1/study-plans/${plan.id}`,
+        studyPlanSchema,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schedule }),
+          accessToken,
+        }
+      );
+      setPlans((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+      toast.success(completed ? "Study block completed" : "Study block reopened");
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function reschedulePlan(plan: StudyPlan) {
+    setError(null);
+    try {
+      const accessToken = await token();
+      const updated = await apiRequest(
+        `/api/v1/study-plans/${plan.id}/reschedule`,
+        studyPlanSchema,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            available_minutes_per_day: dailyCapacity,
+          }),
+          accessToken,
+        }
+      );
+      setPlans((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setNotice(updated.summary ?? "Study plan rescheduled.");
+      toast.success("Overdue study blocks rescheduled where capacity allowed.");
     } catch (cause) {
       const err = message(cause);
       setError(err);
@@ -479,11 +659,13 @@ export default function LearningContent() {
           question_count: questionCount,
           course_id: quizCourseId || null,
           published: quizPublished && (role === "professor" || role === "administrator"),
+          assessment_type: assessmentType,
+          duration_minutes:
+            assessmentType === "mock_exam" ? examDurationMinutes : null,
         }),
         accessToken,
       });
-      setActiveQuiz(quiz);
-      setAnswers({});
+      await activateQuiz(quiz);
       setQuizTopic("");
       setNotice("Quiz generated and saved.");
       toast.success("Quiz generated and saved.");
@@ -564,28 +746,7 @@ export default function LearningContent() {
 
   async function submitQuiz(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activeQuiz) return;
-    setError(null);
-    try {
-      const accessToken = await token();
-      const result = await apiRequest(
-        `/api/v1/quizzes/${activeQuiz.id}/attempts`,
-        quizAttemptSchema,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
-          accessToken,
-        }
-      );
-      setAttempt(result);
-      toast.success(`Quiz completed! Score: ${result.score} / ${result.total_points}`);
-      await load();
-    } catch (cause) {
-      const err = message(cause);
-      setError(err);
-      toast.error(err);
-    }
+    await submitQuizAnswers();
   }
 
   return (
@@ -698,7 +859,7 @@ export default function LearningContent() {
                 </div>
               </div>
               <p className="mb-4 text-xs text-muted-foreground">
-                Calendar entries come from saved task deadlines and active study-plan schedules. They are displayed as saved; no automatic rescheduling occurs.
+                Calendar entries come from saved task deadlines and active study-plan schedules. Use a plan action to explicitly reschedule overdue blocks.
               </p>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {calendarDays.map((day) => {
@@ -935,7 +1096,18 @@ export default function LearningContent() {
                     {plans.map((plan) => (
                       <li key={plan.id}>
                         <Card className="p-5">
-                          <CardTitle className="text-base font-semibold">{plan.title}</CardTitle>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <CardTitle className="text-base font-semibold">{plan.title}</CardTitle>
+                            <Button
+                              disabled={plan.status !== "active"}
+                              onClick={() => void reschedulePlan(plan)}
+                              size="xs"
+                              type="button"
+                              variant="outline"
+                            >
+                              Reschedule overdue blocks
+                            </Button>
+                          </div>
                           <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1.5">
                             <Clock className="size-3" />
                             {plan.starts_on ?? "No start date"} – {plan.ends_on ?? "No end date"} · {plan.schedule.length} scheduled blocks
@@ -949,16 +1121,34 @@ export default function LearningContent() {
                             <div className="mt-4 border-t pt-3">
                               <h4 className="text-xs font-semibold text-foreground mb-2">Schedule breakdown:</h4>
                               <ul className="space-y-2">
-                                {plan.schedule.map((block, index) => (
+                                {                                plan.schedule.map((block, index) => (
                                   <li
                                     key={`${block.day}-${block.topic}-${index}`}
-                                    className="text-xs border rounded-lg p-2.5 bg-card/60"
+                                    className={`text-xs border rounded-lg p-2.5 bg-card/60 ${block.completed ? "opacity-60" : ""}`}
                                   >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-semibold text-foreground">{block.day} · {block.topic}</span>
-                                      <Badge variant="outline" className="text-[10px]">
-                                        {block.duration_minutes} min
-                                      </Badge>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <span className={`font-semibold text-foreground ${block.completed ? "line-through" : ""}`}>{block.day} · {block.topic}</span>
+                                        {block.completed && (
+                                          <Badge className="ml-2" variant="secondary">Completed</Badge>
+                                        )}
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px]">
+                                          {block.duration_minutes} min
+                                        </Badge>
+                                        <Button
+                                          aria-label={`${block.completed ? "Reopen" : "Complete"} ${block.topic} study block`}
+                                          onClick={() =>
+                                            void setStudyBlockCompletion(plan, index, !block.completed)
+                                          }
+                                          size="xs"
+                                          type="button"
+                                          variant="ghost"
+                                        >
+                                          {block.completed ? "Reopen" : "Complete"}
+                                        </Button>
+                                      </div>
                                     </div>
                                     {block.rationale && (
                                       <p className="mt-1 text-muted-foreground text-[11px] leading-relaxed">
@@ -1194,6 +1384,38 @@ export default function LearningContent() {
                       Complete a practice quiz to see which topics may need more review.
                     </p>
                   )}
+                  {!!progress?.knowledge_gaps.length && (
+                    <figure className="mt-5 border-t pt-4">
+                      <figcaption className="mb-2 text-xs font-medium text-muted-foreground">
+                        Missed questions by topic
+                      </figcaption>
+                      <div aria-label="Chart of missed quiz questions by topic" role="img">
+                        <ResponsiveContainer width="100%" height={220}>
+                          <BarChart
+                            data={progress.knowledge_gaps.slice(0, 8)}
+                            layout="vertical"
+                            margin={{ left: 8, right: 12, top: 4, bottom: 4 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis allowDecimals={false} type="number" />
+                            <YAxis
+                              dataKey="topic"
+                              type="category"
+                              width={110}
+                              tick={{ fontSize: 11 }}
+                            />
+                            <Tooltip />
+                            <Bar
+                              dataKey="missed_questions"
+                              fill="var(--color-primary)"
+                              name="Missed questions"
+                              radius={[0, 4, 4, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </figure>
+                  )}
                 </Card>
               </div>
             </TabsContent>
@@ -1207,8 +1429,20 @@ export default function LearningContent() {
                     <Card className="p-6">
                       <form className="space-y-6" onSubmit={submitQuiz}>
                         <div>
-                          <Badge variant="outline" className="mb-2">Active Quiz</Badge>
+                          <Badge variant="outline" className="mb-2">
+                            {activeQuiz.assessment_type === "mock_exam" ? "Mock Exam" : "Practice Quiz"}
+                          </Badge>
                           <h3 className="text-xl font-semibold text-foreground">{activeQuiz.title}</h3>
+                          {activeQuiz.assessment_type === "mock_exam" && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {examSecondsRemaining !== null
+                                ? `Time remaining: ${Math.floor(examSecondsRemaining / 60)}:${String(examSecondsRemaining % 60).padStart(2, "0")}`
+                                : examAttemptId
+                                  ? "Timed attempt in progress."
+                                  : "Starting timed attempt…"}{" "}
+                              Answers and explanations are shown after submission.
+                            </p>
+                          )}
                           {activeQuiz.description && (
                             <p className="mt-1 text-xs text-muted-foreground">{activeQuiz.description}</p>
                           )}
@@ -1231,6 +1465,12 @@ export default function LearningContent() {
                                 >
                                   <input
                                     checked={answers[question.id] === option}
+                                    disabled={
+                                      submittingAttempt ||
+                                      Boolean(attempt) ||
+                                      (activeQuiz.assessment_type === "mock_exam" &&
+                                        (!examAttemptId || examSecondsRemaining === 0))
+                                    }
                                     name={question.id}
                                     onChange={() =>
                                       setAnswers((current) => ({
@@ -1249,8 +1489,17 @@ export default function LearningContent() {
                           </fieldset>
                         ))}
 
-                        <Button className="w-full" type="submit">
-                          Submit answers
+                        <Button
+                          className="w-full"
+                          disabled={
+                            submittingAttempt ||
+                            Boolean(attempt) ||
+                            (activeQuiz.assessment_type === "mock_exam" &&
+                              !examAttemptId)
+                          }
+                          type="submit"
+                        >
+                          {submittingAttempt ? "Submitting…" : "Submit answers"}
                         </Button>
                       </form>
 
@@ -1287,7 +1536,7 @@ export default function LearningContent() {
 
                   {/* Saved Quizzes */}
                   <div>
-                    <h3 className="text-lg font-semibold text-foreground mb-4">Saved practice quizzes</h3>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">Saved assessments</h3>
                     <ul className="space-y-3">
                       {quizzes.map((quiz) => (
                         <li key={quiz.id}>
@@ -1295,22 +1544,20 @@ export default function LearningContent() {
                             <div>
                               <p className="font-medium text-sm text-foreground">{quiz.title}</p>
                               <p className="mt-0.5 text-xs text-muted-foreground">
-                                {quiz.questions.length} questions · {new Date(quiz.created_at).toLocaleDateString()}
+                                {quiz.assessment_type === "mock_exam" ? "Mock exam" : "Practice quiz"}
+                                {quiz.duration_minutes ? ` · ${quiz.duration_minutes} min` : ""}
+                                {" · "}{quiz.questions.length} questions · {new Date(quiz.created_at).toLocaleDateString()}
                               </p>
                             </div>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
-                                setActiveQuiz(quiz);
-                                setAnswers({});
-                                setAttempt(null);
-                              }}
+                              onClick={() => void activateQuiz(quiz)}
                               type="button"
                               className="gap-1.5"
                             >
                               <Play className="size-3.5" />
-                              Practice
+                              {quiz.assessment_type === "mock_exam" ? "Start exam" : "Practice"}
                             </Button>
                           </Card>
                         </li>
@@ -1335,6 +1582,38 @@ export default function LearningContent() {
                     </CardDescription>
 
                     <form className="mt-4 space-y-3" onSubmit={generateQuiz}>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1" htmlFor="assessment-type">
+                          Assessment type
+                        </label>
+                        <select
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          id="assessment-type"
+                          onChange={(event) =>
+                            setAssessmentType(event.target.value as "practice" | "mock_exam")
+                          }
+                          value={assessmentType}
+                        >
+                          <option value="practice">Practice quiz</option>
+                          <option value="mock_exam">Mock exam</option>
+                        </select>
+                      </div>
+                      {assessmentType === "mock_exam" && (
+                        <div>
+                          <label className="block text-xs font-medium text-foreground mb-1" htmlFor="exam-duration">
+                            Suggested duration (minutes)
+                          </label>
+                          <Input
+                            id="exam-duration"
+                            max={240}
+                            min={5}
+                            onChange={(event) => setExamDurationMinutes(Number(event.target.value))}
+                            required
+                            type="number"
+                            value={examDurationMinutes}
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1" htmlFor="quiz-topic">
                           Topic or concept

@@ -37,15 +37,18 @@ describe("WorkspaceContent Component", () => {
       if (endpoint === "/api/v1/documents") {
         return [];
       }
+      if (endpoint === "/api/v1/courses" || endpoint === "/api/v1/agents/conversations") {
+        return [];
+      }
       return {} as never;
     });
 
     render(<WorkspaceContent />);
 
     await waitFor(() => {
-      expect(screen.getByText("No documents uploaded yet.")).toBeDefined();
+      expect(screen.getByText("No documents uploaded yet")).toBeDefined();
     });
-    expect(screen.getByText("AI workspace")).toBeDefined();
+    expect(screen.getByText("AI Workspace")).toBeDefined();
     expect(screen.getByText("Ask your university assistant")).toBeDefined();
   });
 
@@ -63,6 +66,9 @@ describe("WorkspaceContent Component", () => {
           },
         ];
       }
+      if (endpoint === "/api/v1/courses" || endpoint === "/api/v1/agents/conversations") {
+        return [];
+      }
       return {} as never;
     });
 
@@ -76,12 +82,21 @@ describe("WorkspaceContent Component", () => {
 
   it("allows user to type a question into the chat input", async () => {
     const user = userEvent.setup();
-    vi.spyOn(api, "apiRequest").mockResolvedValue([]);
+    vi.spyOn(api, "apiRequest").mockImplementation(async (endpoint) => {
+      if (
+        endpoint === "/api/v1/documents" ||
+        endpoint === "/api/v1/courses" ||
+        endpoint === "/api/v1/agents/conversations"
+      ) {
+        return [];
+      }
+      return {} as never;
+    });
 
     render(<WorkspaceContent />);
 
     await waitFor(() => {
-      expect(screen.getByText("No documents uploaded yet.")).toBeDefined();
+      expect(screen.getByText("No documents uploaded yet")).toBeDefined();
     });
 
     const input = screen.getByPlaceholderText("Ask a question about your materials…");

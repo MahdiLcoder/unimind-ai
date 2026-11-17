@@ -404,6 +404,7 @@ async def list_course_enrollments(
         .where(
             QuizAttempt.user_id == Enrollment.student_id,
             Quiz.course_id == course_id,
+            QuizAttempt.status == "submitted",
         )
         .correlate(Enrollment)
         .scalar_subquery()
@@ -501,7 +502,10 @@ async def course_learning_overview(
                 ),
             )
             .join(Quiz, Quiz.id == QuizAttempt.quiz_id)
-            .where(Quiz.course_id == course_id)
+            .where(
+                Quiz.course_id == course_id,
+                QuizAttempt.status == "submitted",
+            )
         )
     ).one()
     return CourseLearningOverview(

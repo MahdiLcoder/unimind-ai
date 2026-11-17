@@ -301,6 +301,17 @@ class LearningLesson(Base):
 
 class Quiz(Base):
     __tablename__ = "quizzes"
+    __table_args__ = (
+        CheckConstraint(
+            "assessment_type IN ('practice', 'mock_exam')",
+            name="ck_quizzes_assessment_type",
+        ),
+        CheckConstraint(
+            "(assessment_type = 'practice' AND duration_minutes IS NULL) OR "
+            "(assessment_type = 'mock_exam' AND duration_minutes >= 5)",
+            name="ck_quizzes_duration",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     creator_id: Mapped[str] = mapped_column(
@@ -316,6 +327,10 @@ class Quiz(Base):
     published: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    assessment_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'practice'")
+    )
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -349,6 +364,10 @@ class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"
     __table_args__ = (
         Index("ix_quiz_attempts_user_submitted", "user_id", "submitted_at"),
+        CheckConstraint(
+            "status IN ('in_progress', 'submitted', 'expired')",
+            name="ck_quiz_attempts_status",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -364,6 +383,12 @@ class QuizAttempt(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="submitted", server_default=text("'submitted'")
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -384,6 +409,7 @@ class ResearchPaper(Base):
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     authors: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")

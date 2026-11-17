@@ -49,6 +49,7 @@ class ResearchPaperResponse(BaseModel):
     external_id: str | None
     title: str
     abstract: str | None
+    summary: str | None
     year: int | None
     authors: list[str]
     doi: str | None
@@ -80,6 +81,10 @@ class ResearchCompareRequest(BaseModel):
 
 class ResearchCompareResponse(BaseModel):
     comparison: str
+
+
+class ResearchPaperSummaryResponse(BaseModel):
+    summary: str
 
 
 def get_crossref_search() -> CrossrefSearch:
@@ -212,6 +217,62 @@ async def compare_saved_research_papers(
     )
     response = await service.invoke(request)
     return ResearchCompareResponse(comparison=response.response)
+
+
+@router.post(
+    "/papers/{paper_id}/summary",
+    response_model=ResearchPaperSummaryResponse,
+)
+async def summarize_saved_research_paper(
+    paper_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
+    service: Annotated[AgentService, Depends(get_agent_service)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ResearchPaperSummaryResponse:
+    paper = await session.scalar(
+        select(ResearchPaper).where(
+            ResearchPaper.id == paper_id,
+            ResearchPaper.owner_id == user.clerk_user_id,
+        )
+    )
+    if paper is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research paper was not found",
+        )
+    if paper.summary:
+        return ResearchPaperSummaryResponse(summary=paper.summary)
+
+    abstract = (paper.abstract or "").strip()
+    request = make_agent_request(
+        principal,
+        conversation_id=uuid4(),
+        request_id=uuid4(),
+        message=(
+            "Summarize this saved academic paper using only the supplied "
+            "bibliographic metadata and abstract. State the research focus, "
+            "approach, reported contribution, and limitations that can be "
+            "supported by the abstract. Explicitly say when information is "
+            "unavailable; do not infer unreported results or claim full-text "
+            "access.\n\n"
+            f"Title: {paper.title[:512]}\n"
+            f"Authors: {', '.join(paper.authors[:10]) or 'Not listed'}\n"
+            f"Year: {paper.year or 'Not listed'}\n"
+            f"DOI: {paper.doi or 'Not listed'}\n"
+            f"Abstract: {abstract[:8000] or 'No abstract is available.'}"
+        ),
+    )
+    generated = await service.invoke(request)
+    summary = generated.response.strip()
+    if not summary:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The research agent returned an empty paper summary",
+        )
+    paper.summary = summary[:12000]
+    await session.commit()
+    return ResearchPaperSummaryResponse(summary=paper.summary)
 
 
 @router.delete(

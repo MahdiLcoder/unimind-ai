@@ -129,6 +129,7 @@ class StudyBlock(BaseModel):
     course_id: str | None = Field(default=None, min_length=1, max_length=36)
     priority: str | None = Field(default=None, max_length=32)
     rationale: str | None = Field(default=None, max_length=1000)
+    completed: bool = False
 
 
 class StudyPlanCreate(BaseModel):
@@ -161,6 +162,12 @@ class StudyPlanUpdate(BaseModel):
     ends_on: date | None = None
     status: PlanStatus | None = None
     schedule: list[StudyBlock] | None = Field(default=None, max_length=200)
+
+
+class StudyPlanRescheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available_minutes_per_day: int = Field(default=120, ge=15, le=600)
 
 
 class StudyPlanResponse(BaseModel):
@@ -223,7 +230,17 @@ class QuizCreate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     course_id: str | None = Field(default=None, min_length=1, max_length=36)
     published: bool = False
+    assessment_type: Literal["practice", "mock_exam"] = "practice"
+    duration_minutes: int | None = Field(default=None, ge=5, le=240)
     questions: list[QuestionCreate] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_assessment_duration(self) -> QuizCreate:
+        if self.assessment_type == "mock_exam" and self.duration_minutes is None:
+            self.duration_minutes = 60
+        elif self.assessment_type == "practice" and self.duration_minutes is not None:
+            raise ValueError("practice quizzes cannot have an exam duration")
+        return self
 
 
 class QuizGenerationRequest(BaseModel):
@@ -233,6 +250,16 @@ class QuizGenerationRequest(BaseModel):
     question_count: int = Field(default=5, ge=1, le=20)
     course_id: str | None = Field(default=None, min_length=1, max_length=36)
     published: bool = False
+    assessment_type: Literal["practice", "mock_exam"] = "practice"
+    duration_minutes: int | None = Field(default=None, ge=5, le=240)
+
+    @model_validator(mode="after")
+    def validate_assessment_duration(self) -> QuizGenerationRequest:
+        if self.assessment_type == "mock_exam" and self.duration_minutes is None:
+            self.duration_minutes = 60
+        elif self.assessment_type == "practice" and self.duration_minutes is not None:
+            raise ValueError("practice quizzes cannot have an exam duration")
+        return self
 
 
 class FlashcardGenerationRequest(BaseModel):
@@ -293,6 +320,8 @@ class QuizResponse(BaseModel):
     title: str
     description: str | None
     published: bool
+    assessment_type: Literal["practice", "mock_exam"]
+    duration_minutes: int | None
     created_at: datetime
     questions: list[QuizQuestionResponse]
 
@@ -301,6 +330,13 @@ class QuizSubmission(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answers: dict[UUID, str] = Field(max_length=100)
+    attempt_id: UUID | None = None
+
+
+class QuizAttemptStartResponse(BaseModel):
+    id: UUID
+    started_at: datetime
+    expires_at: datetime
 
 
 class QuestionFeedback(BaseModel):
@@ -939,6 +975,58 @@ async def update_study_plan(
     return StudyPlanResponse.model_validate(plan)
 
 
+@router.post(
+    "/study-plans/{plan_id}/reschedule",
+    response_model=StudyPlanResponse,
+)
+async def reschedule_study_plan(
+    plan_id: UUID,
+    body: StudyPlanRescheduleRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StudyPlanResponse:
+    plan = await session.scalar(
+        select(StudyPlan).where(
+            StudyPlan.id == plan_id,
+            StudyPlan.owner_id == user.clerk_user_id,
+        )
+    )
+    if plan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study plan was not found",
+        )
+
+    today = date.today()
+    schedule, moved_count, unscheduled_minutes = _reschedule_overdue_blocks(
+        [StudyBlock.model_validate(block) for block in plan.schedule],
+        today=today,
+        starts_on=plan.starts_on,
+        ends_on=plan.ends_on,
+        available_minutes_per_day=body.available_minutes_per_day,
+    )
+    if len(schedule) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Rescheduled plan exceeds the maximum supported size",
+        )
+
+    plan.schedule = [block.model_dump(mode="json") for block in schedule]
+    status_text = (
+        f"Adaptive reschedule on {today.isoformat()}: moved "
+        f"{moved_count} overdue study block(s)."
+    )
+    if unscheduled_minutes:
+        status_text += (
+            f" {unscheduled_minutes} minute(s) remain unscheduled because daily "
+            "capacity or the plan end date left no available time."
+        )
+    plan.summary = "\n\n".join(part for part in (plan.summary, status_text) if part)
+    await session.commit()
+    await session.refresh(plan)
+    return StudyPlanResponse.model_validate(plan)
+
+
 @router.get("/quizzes", response_model=list[QuizResponse])
 async def list_quizzes(
     user: Annotated[User, Depends(get_current_user)],
@@ -1040,7 +1128,10 @@ async def get_learning_progress(
         select(QuizAttempt, Quiz, QuizQuestion)
         .join(Quiz, Quiz.id == QuizAttempt.quiz_id)
         .join(QuizQuestion, QuizQuestion.quiz_id == Quiz.id)
-        .where(QuizAttempt.user_id == user.clerk_user_id)
+        .where(
+            QuizAttempt.user_id == user.clerk_user_id,
+            QuizAttempt.status == "submitted",
+        )
         .order_by(QuizAttempt.submitted_at.desc(), QuizAttempt.id)
     )
     attempt_totals: dict[UUID, dict[str, int]] = {}
@@ -1102,6 +1193,8 @@ async def create_quiz(
         title=body.title.strip(),
         description=body.description,
         published=body.published,
+        assessment_type=body.assessment_type,
+        duration_minutes=body.duration_minutes,
     )
     session.add(quiz)
     await session.flush()
@@ -1181,7 +1274,13 @@ async def generate_quiz(
             "items array; it contains questions, not answer choices. Set mode "
             "to quiz. Every item must include a concise prompt, a choices array "
             "with exactly four distinct choices, the exact correct choice as "
-            "answer, and a concise explanation."
+            "answer, and a concise explanation. "
+            + (
+                "Make this a realistic mock examination with varied difficulty "
+                f"for an approximately {body.duration_minutes}-minute sitting."
+                if body.assessment_type == "mock_exam"
+                else "Keep the questions focused on practice and immediate review."
+            )
         ),
     )
     state = await service.invoke_learning(request)
@@ -1198,9 +1297,14 @@ async def generate_quiz(
     quiz = Quiz(
         creator_id=principal.user_id,
         course_id=body.course_id,
-        title=f"Practice quiz: {body.topic.strip()[:170]}",
+        title=(
+            f"{'Mock exam' if body.assessment_type == 'mock_exam' else 'Practice quiz'}: "
+            f"{body.topic.strip()[:170]}"
+        ),
         description=generated.response,
         published=body.published,
+        assessment_type=body.assessment_type,
+        duration_minutes=body.duration_minutes,
     )
     session.add(quiz)
     await session.flush()
@@ -1311,6 +1415,20 @@ def _learning_response_from_agent_output(
     return LearningResponse.model_validate(response_payload)
 
 
+def _mock_exam_attempt_expired(
+    quiz: Quiz,
+    attempt: QuizAttempt,
+    now: datetime,
+) -> bool:
+    if (
+        quiz.assessment_type != "mock_exam"
+        or quiz.duration_minutes is None
+        or attempt.started_at is None
+    ):
+        return False
+    return now >= attempt.started_at + timedelta(minutes=quiz.duration_minutes)
+
+
 def _validated_quiz_questions(
     generated: LearningResponse,
     requested_count: int,
@@ -1346,6 +1464,50 @@ def _validated_quiz_questions(
 
 
 @router.post(
+    "/quizzes/{quiz_id}/attempts/start",
+    response_model=QuizAttemptStartResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_mock_exam_attempt(
+    quiz_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> QuizAttemptStartResponse:
+    quiz = await session.get(Quiz, quiz_id)
+    if quiz is None or (
+        quiz.creator_id != user.clerk_user_id and not quiz.published
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mock exam was not found",
+        )
+    if quiz.assessment_type != "mock_exam" or quiz.duration_minutes is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only mock exams can be started as timed attempts",
+        )
+    if quiz.course_id is not None:
+        await require_course_access(quiz.course_id, user, session)
+
+    started_at = datetime.now(UTC)
+    attempt = QuizAttempt(
+        quiz_id=quiz.id,
+        user_id=user.clerk_user_id,
+        answers={},
+        status="in_progress",
+        started_at=started_at,
+    )
+    session.add(attempt)
+    await session.commit()
+    await session.refresh(attempt)
+    return QuizAttemptStartResponse(
+        id=attempt.id,
+        started_at=started_at,
+        expires_at=started_at + timedelta(minutes=quiz.duration_minutes),
+    )
+
+
+@router.post(
     "/quizzes/{quiz_id}/attempts",
     response_model=QuizAttemptResponse,
     status_code=status.HTTP_201_CREATED,
@@ -1366,6 +1528,38 @@ async def submit_quiz_attempt(
         )
     if quiz.course_id is not None:
         await require_course_access(quiz.course_id, user, session)
+    attempt: QuizAttempt | None = None
+    if quiz.assessment_type == "mock_exam":
+        if body.attempt_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Start the mock exam before submitting answers",
+            )
+        attempt = await session.scalar(
+            select(QuizAttempt).where(
+                QuizAttempt.id == body.attempt_id,
+                QuizAttempt.quiz_id == quiz.id,
+                QuizAttempt.user_id == user.clerk_user_id,
+                QuizAttempt.status == "in_progress",
+            )
+        )
+        if attempt is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Active mock-exam attempt was not found",
+            )
+        if _mock_exam_attempt_expired(quiz, attempt, datetime.now(UTC)):
+            attempt.status = "expired"
+            await session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The mock-exam time limit has expired",
+            )
+    elif body.attempt_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Practice quizzes do not use a started attempt",
+        )
     questions = list(
         await session.scalars(
             select(QuizQuestion)
@@ -1398,13 +1592,22 @@ async def submit_quiz_attempt(
                 total_points=question.points,
             )
         )
-    attempt = QuizAttempt(
-        quiz_id=quiz.id,
-        user_id=user.clerk_user_id,
-        answers={str(question_id): answer for question_id, answer in body.answers.items()},
-        score=score,
-    )
-    session.add(attempt)
+    if attempt is None:
+        attempt = QuizAttempt(
+            quiz_id=quiz.id,
+            user_id=user.clerk_user_id,
+            answers={str(question_id): answer for question_id, answer in body.answers.items()},
+            score=score,
+            status="submitted",
+        )
+        session.add(attempt)
+    else:
+        attempt.answers = {
+            str(question_id): answer for question_id, answer in body.answers.items()
+        }
+        attempt.score = score
+        attempt.status = "submitted"
+        attempt.submitted_at = datetime.now(UTC)
     add_audit_log(
         session,
         actor_id=user.clerk_user_id,
@@ -1438,6 +1641,8 @@ async def _quiz_response(session: AsyncSession, quiz: Quiz) -> QuizResponse:
         title=quiz.title,
         description=quiz.description,
         published=quiz.published,
+        assessment_type=quiz.assessment_type,
+        duration_minutes=quiz.duration_minutes,
         created_at=quiz.created_at,
         questions=[
             QuizQuestionResponse(
@@ -1521,6 +1726,85 @@ def _schedule_study_plan(
 
     blocks.sort(key=lambda block: (block.day, block.topic))
     return blocks, unscheduled
+
+
+def _reschedule_overdue_blocks(
+    current: list[StudyBlock],
+    *,
+    today: date,
+    starts_on: date | None,
+    ends_on: date | None,
+    available_minutes_per_day: int,
+) -> tuple[list[StudyBlock], int, int]:
+    overdue = sorted(
+        (
+            block
+            for block in current
+            if block.day < today and not block.completed
+        ),
+        key=lambda block: (block.day, block.topic),
+    )
+    if not overdue:
+        return current, 0, 0
+
+    schedule_start = max(today, starts_on) if starts_on else today
+    schedule_end = ends_on or schedule_start + timedelta(days=30)
+    fixed = [
+        block
+        for block in current
+        if block.day >= today or block.completed
+    ]
+    daily_load: dict[date, int] = {}
+    for block in fixed:
+        if not block.completed:
+            daily_load[block.day] = (
+                daily_load.get(block.day, 0) + block.duration_minutes
+            )
+
+    rescheduled: list[StudyBlock] = []
+    moved_count = 0
+    unscheduled_minutes = 0
+    for block in overdue:
+        remaining = block.duration_minutes
+        day = schedule_start
+        moved_block = False
+        while day <= schedule_end and remaining:
+            capacity = max(
+                0,
+                available_minutes_per_day - daily_load.get(day, 0),
+            )
+            if capacity >= 5:
+                duration = min(capacity, remaining)
+                leftover = remaining - duration
+                if 0 < leftover < 5:
+                    adjusted_duration = duration - (5 - leftover)
+                    if adjusted_duration < 5:
+                        day += timedelta(days=1)
+                        continue
+                    duration = adjusted_duration
+                rescheduled.append(
+                    block.model_copy(
+                        update={
+                            "day": day,
+                            "duration_minutes": duration,
+                            "completed": False,
+                        }
+                    )
+                )
+                daily_load[day] = daily_load.get(day, 0) + duration
+                remaining -= duration
+                moved_block = True
+            day += timedelta(days=1)
+        moved_count += int(moved_block)
+        if remaining:
+            unscheduled_minutes += remaining
+            rescheduled.append(
+                block.model_copy(update={"duration_minutes": remaining})
+            )
+
+    result = fixed + rescheduled
+    result.sort(key=lambda block: (block.day, block.topic, block.completed))
+    return result, moved_count, unscheduled_minutes
 
 
 def _allocate_study_minutes(

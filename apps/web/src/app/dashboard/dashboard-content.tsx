@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth, useUser } from "@clerk/nextjs";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { z } from "zod";
@@ -110,8 +111,13 @@ const courseLearningOverviewSchema = z.object({
 });
 
 type UserProfile = z.infer<typeof userProfileSchema>;
-type DashboardSummary = z.infer<typeof dashboardSummarySchema>;
-type Notifications = z.infer<typeof notificationsSchema>;
+type ProfileDraft = {
+  display_name: string;
+  university: string;
+  department: string;
+  program: string;
+};
+type ProfileDraftState = { userId: string; values: ProfileDraft };
 type TeachingMetrics = {
   enrolledStudents: number;
   pendingAssignments: number;
@@ -127,90 +133,92 @@ const roleLabels: Record<UserProfile["role"], string> = {
 export default function DashboardPage() {
   const { getToken, isLoaded: authLoaded } = useAuth();
   const { user, isLoaded: userLoaded } = useUser();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [notifications, setNotifications] = useState<Notifications | null>(null);
-  const [teachingMetrics, setTeachingMetrics] = useState<TeachingMetrics | null>(null);
-  const [profileDraft, setProfileDraft] = useState({
-    display_name: "",
-    university: "",
-    department: "",
-    program: "",
-  });
+  const queryClient = useQueryClient();
+  const [profileDraft, setProfileDraft] = useState<ProfileDraftState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
-  useEffect(() => {
-    if (!authLoaded || !userLoaded) return;
-
-    let active = true;
-    void getToken()
-      .then((accessToken) => {
-        if (!accessToken) throw new Error("No active session token was returned");
-        return Promise.all([
-          apiRequest("/api/v1/users/me", userProfileSchema, { accessToken }),
-          apiRequest("/api/v1/dashboard/summary", dashboardSummarySchema, { accessToken }),
-          apiRequest("/api/v1/notifications", notificationsSchema, { accessToken }),
-        ]);
-      })
-      .then(async ([currentUser, currentSummary, currentNotifications]) => {
-        if (active) {
-          setProfile(currentUser);
-          setProfileDraft({
-            display_name: currentUser.display_name ?? "",
-            university: currentUser.university ?? "",
-            department: currentUser.department ?? "",
-            program: currentUser.program ?? "",
-          });
-          setSummary(currentSummary);
-          setNotifications(currentNotifications);
-        }
-        if (currentUser.role === "professor") {
-          const accessToken = await getToken();
-          if (!accessToken) throw new Error("No active session token was returned");
-          const courseList = await apiRequest(
-            "/api/v1/courses",
-            z.array(teachingCourseSchema),
-            { accessToken }
-          );
-          const overviews = await Promise.all(
-            courseList.map((course) =>
-              apiRequest(
-                `/api/v1/courses/${course.id}/learning-overview`,
-                courseLearningOverviewSchema,
-                { accessToken }
-              )
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", user?.id, retry],
+    enabled: authLoaded && userLoaded && !!user?.id,
+    queryFn: async () => {
+      const accessToken = await getToken();
+      if (!accessToken) throw new Error("No active session token was returned");
+      const [currentUser, currentSummary, currentNotifications] = await Promise.all([
+        apiRequest("/api/v1/users/me", userProfileSchema, { accessToken }),
+        apiRequest("/api/v1/dashboard/summary", dashboardSummarySchema, { accessToken }),
+        apiRequest("/api/v1/notifications", notificationsSchema, { accessToken }),
+      ]);
+      let currentTeachingMetrics: TeachingMetrics | null = null;
+      if (currentUser.role === "professor") {
+        const courseList = await apiRequest(
+          "/api/v1/courses",
+          z.array(teachingCourseSchema),
+          { accessToken }
+        );
+        const overviews = await Promise.all(
+          courseList.map((course) =>
+            apiRequest(
+              `/api/v1/courses/${course.id}/learning-overview`,
+              courseLearningOverviewSchema,
+              { accessToken }
             )
-          );
-          const quizAttempts = overviews.reduce((total, item) => total + item.quiz_attempts, 0);
-          const weightedQuizScore = overviews.reduce(
-            (total, item) => total + (item.average_quiz_score_percent ?? 0) * item.quiz_attempts,
+          )
+        );
+        const quizAttempts = overviews.reduce((total, item) => total + item.quiz_attempts, 0);
+        const weightedQuizScore = overviews.reduce(
+          (total, item) => total + (item.average_quiz_score_percent ?? 0) * item.quiz_attempts,
+          0
+        );
+        currentTeachingMetrics = {
+          enrolledStudents: overviews.reduce((total, item) => total + item.active_students, 0),
+          pendingAssignments: overviews.reduce(
+            (total, item) => total + item.pending_submissions_count,
             0
-          );
-          if (active) {
-            setTeachingMetrics({
-              enrolledStudents: overviews.reduce((total, item) => total + item.active_students, 0),
-              pendingAssignments: overviews.reduce(
-                (total, item) => total + item.pending_submissions_count,
-                0
-              ),
-              averageQuizScore: quizAttempts > 0 ? weightedQuizScore / quizAttempts : null,
-            });
-          }
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          const err = cause instanceof Error ? cause.message : "Could not load your profile";
-          setError(err);
-          toast.error("Dashboard error: " + err);
-        }
-      });
+          ),
+          averageQuizScore: quizAttempts > 0 ? weightedQuizScore / quizAttempts : null,
+        };
+      }
+      return {
+        profile: currentUser,
+        summary: currentSummary,
+        notifications: currentNotifications,
+        teachingMetrics: currentTeachingMetrics,
+      };
+    },
+  });
 
-    return () => {
-      active = false;
-    };
-  }, [authLoaded, getToken, retry, userLoaded]);
+  const profile = dashboardQuery.data?.profile ?? null;
+  const summary = dashboardQuery.data?.summary ?? null;
+  const notifications = dashboardQuery.data?.notifications ?? null;
+  const teachingMetrics = dashboardQuery.data?.teachingMetrics ?? null;
+  const resolvedError =
+    error ??
+    (dashboardQuery.error instanceof Error
+      ? dashboardQuery.error.message
+      : dashboardQuery.error
+        ? "Could not load your profile"
+        : null);
+  const profileDefaults: ProfileDraft = {
+    display_name: profile?.display_name ?? "",
+    university: profile?.university ?? "",
+    department: profile?.department ?? "",
+    program: profile?.program ?? "",
+  };
+  const resolvedProfileDraft =
+    profileDraft && profileDraft.userId === user?.id
+      ? profileDraft.values
+      : profileDefaults;
+
+  useEffect(() => {
+    if (dashboardQuery.error) {
+      const err =
+        dashboardQuery.error instanceof Error
+          ? dashboardQuery.error.message
+          : "Could not load your profile";
+      toast.error(`Dashboard error: ${err}`);
+    }
+  }, [dashboardQuery.error]);
 
   async function markNotificationRead(notificationId: string) {
     setError(null);
@@ -222,12 +230,24 @@ export default function DashboardPage() {
         notificationsSchema.shape.items.element,
         { method: "POST", accessToken }
       );
-      setNotifications((current) =>
-        current && {
-          ...current,
-          items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-          unread_count: Math.max(0, current.unread_count - (updated.read_at ? 1 : 0)),
-        }
+      queryClient.setQueryData(
+        ["dashboard", user?.id, retry],
+        (current: typeof dashboardQuery.data) =>
+          current
+            ? {
+                ...current,
+                notifications: {
+                  ...current.notifications,
+                  items: current.notifications.items.map((item) =>
+                    item.id === updated.id ? updated : item
+                  ),
+                  unread_count: Math.max(
+                    0,
+                    current.notifications.unread_count - (updated.read_at ? 1 : 0)
+                  ),
+                },
+              }
+            : current
       );
       toast.success("Notification marked as read");
     } catch (cause) {
@@ -249,11 +269,24 @@ export default function DashboardPage() {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(profileDraft),
+          body: JSON.stringify(resolvedProfileDraft),
           accessToken,
         }
       );
-      setProfile(updatedProfile);
+      setProfileDraft({
+        userId: user?.id ?? "",
+        values: {
+          display_name: updatedProfile.display_name ?? "",
+          university: updatedProfile.university ?? "",
+          department: updatedProfile.department ?? "",
+          program: updatedProfile.program ?? "",
+        },
+      });
+      queryClient.setQueryData(
+        ["dashboard", user?.id, retry],
+        (current: typeof dashboardQuery.data) =>
+          current ? { ...current, profile: updatedProfile } : current
+      );
       toast.success("Profile saved");
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not save your profile";
@@ -262,7 +295,7 @@ export default function DashboardPage() {
     }
   }
 
-  const isLoading = (!authLoaded || !userLoaded) || (!profile && !error);
+  const isLoading = !authLoaded || !userLoaded || dashboardQuery.isLoading;
 
   const workspaces = [
     {
@@ -336,9 +369,9 @@ export default function DashboardPage() {
           </Link>
         </PageHeader>
 
-        {error && (
+        {resolvedError && (
           <div className="mt-6 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-sm" role="alert">
-            <p className="font-medium text-destructive">{error}</p>
+            <p className="font-medium text-destructive">{resolvedError}</p>
             <Button
               variant="outline"
               size="sm"
@@ -770,11 +803,16 @@ export default function DashboardPage() {
                       maxLength={maxLength}
                       onChange={(event) =>
                         setProfileDraft((current) => ({
-                          ...current,
-                          [field]: event.target.value,
+                          userId: user?.id ?? "",
+                          values: {
+                            ...(current && current.userId === user?.id
+                              ? current.values
+                              : profileDefaults),
+                            [field]: event.target.value,
+                          },
                         }))
                       }
-                      value={profileDraft[field]}
+                      value={resolvedProfileDraft[field]}
                     />
                   </div>
                 ))}
