@@ -20,7 +20,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { SiteHeader } from "@/components/site-header";
-import Image from "next/image";
 
 const features = [
   {
@@ -93,11 +92,7 @@ const faqs = [
 ];
 
 export default function Home() {
-  const [year, setYear] = useState(2026);
-
-  useEffect(() => {
-    setYear(new Date().getFullYear());
-  }, []);
+  const [year] = useState(() => new Date().getFullYear());
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
