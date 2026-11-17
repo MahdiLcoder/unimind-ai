@@ -235,7 +235,9 @@ Required Clerk settings include:
 - `CLERK_ISSUER`
 - `CLERK_AUTHORIZED_PARTIES`
 
-New users receive the `student` role. Initial administrators can be configured through `ADMIN_CLERK_USER_IDS`. Subsequent role changes and privileged operations are restricted to server-side administrator authorization.
+New users receive the `student` role. IDs in `ADMIN_CLERK_USER_IDS` are promoted
+to administrator whenever they authenticate; remove an ID after promotion if
+you want administrator role changes to be managed through the app.
 
 The API does not trust browser-supplied roles or course scopes. Document and course permissions are derived from ownership, enrollment, professor assignments, or administrator status.
 

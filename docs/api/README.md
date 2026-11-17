@@ -23,8 +23,10 @@ Roles:
 - `professor`
 - `administrator`
 
-New users default to `student`. Initial administrator IDs are configured by
-`ADMIN_CLERK_USER_IDS`; subsequent role changes require an administrator.
+New users default to `student`. IDs in `ADMIN_CLERK_USER_IDS` are promoted to
+administrator on authentication, including existing accounts. Remove an ID
+after promotion if its role should be managed through the administrator API.
+Other role changes require an administrator.
 
 | Status | Meaning |
 |---|---|

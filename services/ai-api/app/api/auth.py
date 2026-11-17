@@ -55,6 +55,7 @@ async def get_current_user(
         ) from exc
 
     clerk_user_id = claims["sub"]
+    is_bootstrap_admin = clerk_user_id in settings.bootstrap_admin_user_ids
     user = await session.get(User, clerk_user_id)
     if user is None:
         email = claims.get("email")
@@ -62,7 +63,7 @@ async def get_current_user(
             email = None
         role = (
             UserRole.ADMINISTRATOR.value
-            if clerk_user_id in settings.bootstrap_admin_user_ids
+            if is_bootstrap_admin
             else UserRole.STUDENT.value
         )
         statement = (
@@ -80,6 +81,9 @@ async def get_current_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not provision the authenticated user",
         )
+    if is_bootstrap_admin and user.role != UserRole.ADMINISTRATOR.value:
+        user.role = UserRole.ADMINISTRATOR.value
+        await session.commit()
     return user
 
 

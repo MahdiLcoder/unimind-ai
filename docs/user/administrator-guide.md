@@ -3,8 +3,11 @@
 ## Access
 
 Administrator permissions require the local server-side `administrator` role.
-Initial administrator IDs can be configured with `ADMIN_CLERK_USER_IDS` before
-the first sign-in. Role changes are administrator-only.
+Clerk IDs in `ADMIN_CLERK_USER_IDS` are promoted to administrator on
+authentication, including existing UniMind accounts. Remove an ID from that
+setting after promotion if you want its role to be managed through the app;
+while an ID remains configured, it will be promoted again on authentication.
+Other role changes are administrator-only.
 
 ## Administration
 
