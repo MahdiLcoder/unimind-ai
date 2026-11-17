@@ -25,6 +25,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface NavItem {
   name: string;
@@ -56,8 +57,9 @@ function SiteHeaderContent() {
             href="/"
             className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors group-hover:bg-primary/90">
-              <Eye className="size-5" />
+            <div className="flex size-8 items-center justify-center group-hover:bg-primary/90">
+              {/* <Eye className="size-5" /> */}
+              <Image src='/logo.jpg' alt="logo" width={28} height={28}/>
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">

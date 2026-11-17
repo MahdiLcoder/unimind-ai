@@ -20,6 +20,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { SiteHeader } from "@/components/site-header";
+import Image from "next/image";
 
 const features = [
   {
@@ -422,7 +423,7 @@ export default function Home() {
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Intelligent academic platform for Institut Supérieur d&apos;Informatique du Kef. Engineered by{" "}
-                <span className="font-medium text-foreground">#AB-Mahdi</span>.
+                <span className="font-medium text-foreground">#AB-MAHDI</span>.
               </p>
               <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                 <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -452,7 +453,7 @@ export default function Home() {
           </div>
 
           <div className="mt-10 border-t border-border/40 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-            <p>© {year} UniMind AI · ISI Kef · Developed by <span className="font-medium text-foreground">#AB-Mahdi</span></p>
+            <p>© {year} UniMind AI · ISI Kef · Developed by <span className="font-medium text-foreground">#AB-MAHDI</span></p>
             <div className="flex items-center gap-4">
               <Link href="/sign-in" className="hover:text-foreground transition-colors">Sign in</Link>
               <Link href="/sign-up" className="hover:text-foreground transition-colors">Register</Link>
