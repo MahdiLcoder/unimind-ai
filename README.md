@@ -21,6 +21,22 @@ persistent user memory for learning preferences and progress.
 See [the architecture overview](docs/architecture/overview.md) for service
 boundaries and health checks.
 
+## Phase 8 defense documentation
+
+- [Technical report](docs/report/technical-report.md)
+- [Architecture diagrams](docs/architecture/diagrams.md)
+- [API documentation](docs/api/README.md)
+- [Experimental evaluation report](docs/evaluation/experimental-evaluation-report.md)
+- [Student guide](docs/user/student-guide.md)
+- [Professor guide](docs/user/professor-guide.md)
+- [Administrator guide](docs/user/administrator-guide.md)
+- [Installation guide](docs/user/installation-guide.md)
+- [Developer guide](docs/user/developer-guide.md)
+- [Troubleshooting guide](docs/user/troubleshooting-guide.md)
+- [Final demonstration script](docs/report/demonstration-script.md)
+- [Presentation outline](docs/report/presentation.md)
+- [Final project checklist](docs/report/final-project-checklist.md)
+
 ## Prerequisites
 
 - Docker Engine and Docker Compose
