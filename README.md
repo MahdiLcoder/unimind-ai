@@ -1,102 +1,204 @@
 # UniMind AI
 
-UniMind AI is a university assistant project. It provides a Next.js 16 frontend,
-a FastAPI service, PostgreSQL with pgvector, Redis, and a reusable multilingual
-RAG library. The application adds a collaborative multi-agent layer with
-seven specialized agents, bounded retries, dependency-aware routing, and
-persistent user memory for learning preferences and progress.
+**An intelligent university operations and learning platform combining retrieval-augmented generation, multi-agent workflows, academic tooling, role-based access control, and isolated code execution.**
 
-## Architecture
+[![CI](https://img.shields.io/github/actions/workflow/status/MahdiLcoder/unimind-ai/ci-cd.yml?branch=main&label=CI)](https://github.com/MahdiLcoder/unimind-ai/actions/workflows/ci-cd.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.120+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-- `apps/web`: Next.js App Router, TypeScript, Tailwind CSS 4, shadcn/ui
-- `services/ai-api`: FastAPI, Pydantic settings, async SQLAlchemy, Alembic
-- `ai/rag`, `ai/models`, `ai/evaluation`: reusable retrieval, model-provider,
-  and evaluation interfaces
-- `ai/agents`, `ai/graphs`, `ai/tools`, `ai/prompts`, `ai/state`: multi-agent
-  workflows, prompts, tools, and state
-- `infrastructure`: Docker, Kubernetes, monitoring, and scripts
-- `docs`: architecture and development documentation
-- PostgreSQL 17 with the pgvector extension; Redis with AOF persistence
+> UniMind AI is a full-stack academic product prototype built for students, professors, and administrators. It demonstrates practical integration of modern web development, LLM orchestration, vector retrieval, authentication, data security, DevOps, and reproducible evaluation.
 
-See [the architecture overview](docs/architecture/overview.md) for service
-boundaries and health checks.
+## Table of contents
 
-## Deployment and operations
+- [Overview](#overview)
+- [Key capabilities](#key-capabilities)
+- [System architecture](#system-architecture)
+- [Technology stack](#technology-stack)
+- [Repository structure](#repository-structure)
+- [Quick start](#quick-start)
+- [Local development](#local-development)
+- [Authentication and authorization](#authentication-and-authorization)
+- [AI and RAG architecture](#ai-and-rag-architecture)
+- [Testing and quality](#testing-and-quality)
+- [Deployment](#deployment)
+- [Security considerations](#security-considerations)
+- [Project status](#project-status)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
 
-The local developer stack, production-oriented Compose deployment, CI/CD,
-Kubernetes overlays, monitoring, and recovery procedures are documented in
-[Deployment and operations](docs/deployment.md).
+## Overview
 
-## Phase 8 defense documentation
+UniMind AI provides a unified workspace for academic activities:
 
-- [Technical report](docs/report/technical-report.md)
-- [Architecture diagrams](docs/architecture/diagrams.md)
-- [API documentation](docs/api/README.md)
-- [Experimental evaluation report](docs/evaluation/experimental-evaluation-report.md)
-- [Student guide](docs/user/student-guide.md)
-- [Professor guide](docs/user/professor-guide.md)
-- [Administrator guide](docs/user/administrator-guide.md)
-- [Installation guide](docs/user/installation-guide.md)
-- [Developer guide](docs/user/developer-guide.md)
-- [Troubleshooting guide](docs/user/troubleshooting-guide.md)
-- [Final demonstration script](docs/report/demonstration-script.md)
-- [Presentation outline](docs/report/presentation.md)
-- [Final project checklist](docs/report/final-project-checklist.md)
+- Students can query course documents, manage assignments and study plans, complete quizzes, run coding exercises, and search academic literature.
+- Professors can organize course workspaces, assign learning activities, publish quizzes, and review course-level learning activity.
+- Administrators can manage users and roles, govern workspaces and feature flags, and review audit records.
 
-## Prerequisites
+The implementation combines a Next.js application with a FastAPI backend, PostgreSQL with pgvector, Redis, Clerk authentication, LangGraph agent workflows, optional Ollama and Hugging Face inference, and a separate sandboxed code runner.
 
-- Docker Engine and Docker Compose
-- Node.js 22+ and pnpm 10+
-- Python 3.11+ and uv
+## Key capabilities
 
-The default API installation does not download model weights or start inference.
-Hugging Face inference is an optional CPU-only dependency group, and models load
-lazily one at a time. Ollama generation is configured separately.
+### Intelligent academic workspace
 
-## Run the full stack
+- Document upload and parsing for PDF, Word, and PowerPoint inputs
+- Chunking and semantic indexing with pgvector
+- Private, course-scoped document retrieval
+- Cited, streamed answers and source metadata
+- Persistent conversation and checkpoint state
 
-From the repository root:
+### Multi-agent AI platform
+
+The supervisor routes requests across seven specialist agents:
+
+- Knowledge
+- Learning
+- Research
+- Coding
+- Planning
+- University Services
+- A supervisor/coordinator for dependency-aware orchestration
+
+The graph supports routing, parallel execution, bounded retries, insufficient-evidence retries, and persisted execution events.
+
+### Academic and learning tools
+
+- Course workspaces and student enrollment
+- Assignments, quizzes, attempts, and study plans
+- AI-assisted lessons and flashcard-oriented learning flows
+- Crossref literature search, saved bibliography, summaries, and comparisons
+- Coding generation, review, debugging, tutoring, and challenge feedback
+- Dashboard summaries and persistent in-app notifications
+
+### Governance and platform services
+
+- Server-side Clerk identity resolution
+- Student, professor, and administrator roles
+- Administrator-only role and feature management
+- API health, readiness, metrics, audit, and rate-limit controls
+- Docker, Docker Compose, Kubernetes, monitoring, and rollback workflows
+
+## System architecture
+
+```mermaid
+flowchart LR
+    U[Student / Professor / Administrator] --> W[Next.js 16 web application]
+    W -->|Bearer authentication| A[FastAPI API]
+
+    A -->|async SQLAlchemy| P[(PostgreSQL 17 + pgvector)]
+    A -->|rate limiting / cache| R[(Redis)]
+    A -->|verified JWT| C[Clerk]
+    A -->|tool calls| G[LangGraph supervisor]
+
+    G --> K[Knowledge]
+    G --> L[Learning]
+    G --> X[Research]
+    G --> D[Coding]
+    G --> Q[Planning]
+    G --> S[University Services]
+
+    G -->|RAG retrieval| P
+    G -->|optional generation| O[Ollama]
+    G -->|optional embeddings / reranking| H[Hugging Face]
+    D --> CR[Code runner]
+    CR --> SB[Isolated Python containers]
+```
+
+### Request lifecycle
+
+1. The browser authenticates through Clerk.
+2. Next.js sends an API request with a Clerk bearer token.
+3. FastAPI verifies the token, issuer, audience/party, expiration, and JWKS configuration.
+4. The API resolves or provisions a server-side local user and role.
+5. Route authorization derives course and document permissions from database relationships.
+6. The agent or service executes the requested operation and persists relevant state.
+7. Streaming responses send events and a final cited answer to the browser.
+
+## Technology stack
+
+| Area | Technologies |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, TanStack Query, Recharts |
+| Backend | Python 3.11+, FastAPI, Pydantic Settings, async SQLAlchemy, Alembic |
+| AI orchestration | LangGraph, LangChain core integrations, custom routing and agent workflows |
+| Retrieval | pgvector, PDF/Word/PowerPoint parsing, embeddings, reranking |
+| Authentication | Clerk JWT verification and role-aware API authorization |
+| Data and caching | PostgreSQL 17, Redis 8 |
+| Model providers | Ollama; optional Hugging Face sentence-transformer and reranker models |
+| Code execution | Docker-backed, network-disabled Python runner with resource limits |
+| Testing | Vitest, Testing Library, Playwright, pytest, Ruff |
+| Operations | Docker Compose, GitHub Actions, GHCR, Kubernetes/Kustomize, Prometheus, Grafana |
+
+## Repository structure
+
+```text
+apps/web/                 Next.js application and browser tests
+services/ai-api/          FastAPI service, migrations, API tests, scripts
+ai/                       Reusable agents, graphs, RAG, models, prompts, state
+infrastructure/           Docker, Kubernetes, monitoring, and recovery tooling
+docs/                     Architecture, API, deployment, evaluation, and user guides
+docker-compose.yml        Local development stack
+docker-compose.production.yml
+                          Production-oriented Compose deployment
+pnpm-workspace.yaml       JavaScript workspace configuration
+```
+
+## Quick start
+
+### Prerequisites
+
+- Docker Engine and Docker Compose v2
+- Node.js 22+
+- pnpm 10+
+- Python 3.11+
+- `uv`
+
+### Start the complete local stack
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Services:
+Default endpoints:
 
-- Frontend: <http://localhost:3000>
-- API docs: <http://localhost:8000/docs>
-- Liveness: <http://localhost:8000/health/live>
-- Dependency readiness: <http://localhost:8000/health/ready>
+| Service | URL |
+|---|---|
+| Web application | http://localhost:3000 |
+| FastAPI documentation | http://localhost:8000/docs |
+| API liveness probe | http://localhost:8000/health/live |
+| API readiness probe | http://localhost:8000/health/ready |
 
-The default stack includes PostgreSQL, Redis, FastAPI, an internal code runner,
-and Next.js. The CPU-only Ollama service and its model pull are opt-in so a
-normal startup does not download model weights. To enable them, run
-`docker compose --profile inference up --build`; the configured model defaults
-to `qwen2.5:3b` and is stored in the persistent `ollama_data` volume. The model
-endpoint is not published to the host. Compose builds a minimal Python
-execution image in a one-shot service.
-Agent execution has a configurable `AGENT_EXECUTION_TIMEOUT_SECONDS` limit
-(120 seconds by default to accommodate local CPU inference).
-For PDF embedding and semantic search, set `INSTALL_HF_INFERENCE=true` before
-building the API image. Hugging Face model files are cached in the persistent
-`hf_model_cache` volume. Set `HF_RERANKER_ENABLED=false` to skip the optional
-reranker and its additional model download.
-The API waits for healthy Postgres, Redis, and runner services. A separate
-one-shot migration service applies Alembic migrations (including enabling
-pgvector) before FastAPI starts. The readiness
-endpoint returns HTTP 503 unless Postgres and Redis are reachable. Stop with
-`docker compose down`; named volumes retain database and Redis data.
-The host ports default to `5432`, `6379`, `8000`, and `3000`; set
-`POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `API_HOST_PORT`, or `WEB_HOST_PORT` in
-`.env` if those ports are already in use. The frontend host port defaults to
-`3000`; if it is occupied, update
-`FRONTEND_URL`, `CORS_ORIGINS`, and `CLERK_AUTHORIZED_PARTIES` in `.env` to
-include the frontend origin.
+Stop the stack while preserving named database and cache volumes:
 
-## Run services locally
+```bash
+docker compose down
+```
 
-Install the JavaScript workspace and copy environment defaults:
+Postgres and Redis are available locally on ports `5432` and `6379` by default. Override host ports with `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, and `WEB_HOST_PORT` in `.env`.
+
+### Optional local inference
+
+The default Compose startup does not download model weights:
+
+```bash
+docker compose --profile inference up --build
+```
+
+This starts Ollama and pulls `qwen2.5:3b` by default. For local Hugging Face embeddings and reranking, set:
+
+```dotenv
+INSTALL_HF_INFERENCE=true
+HF_RERANKER_ENABLED=true
+```
+
+Then rebuild the API image. Model caches and Ollama data are stored in named Docker volumes.
+
+## Local development
+
+Install dependencies and start the Next.js workspace:
 
 ```bash
 cp .env.example .env
@@ -104,8 +206,13 @@ pnpm install
 pnpm dev
 ```
 
-Start Postgres and Redis in a separate terminal with
-`docker compose up -d postgres redis`. In another terminal:
+Start data services:
+
+```bash
+docker compose up -d postgres redis
+```
+
+Run the API in a separate terminal:
 
 ```bash
 cd services/ai-api
@@ -114,155 +221,160 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The root `.env` is loaded by the API settings and by `pnpm dev`; `NEXT_PUBLIC_API_URL`
-must point to an address reachable by the browser (the default is
-`http://localhost:8000`). Never commit `.env` or use the example development
-password outside a local machine.
+Set `NEXT_PUBLIC_API_URL` to an API origin reachable from the browser. The API and Next.js both load the repository root `.env`; never commit real credentials or use local example passwords outside development.
 
-## Clerk authentication and roles
+## Authentication and authorization
 
-Create a Clerk application and configure these values in the root `.env`:
+Clerk manages frontend sessions and password recovery. The FastAPI service verifies bearer tokens against configured JWKS and issuer values and resolves a local user record.
 
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (or `CLERK_PUBLISHABLE_KEY`, as emitted
-  by the Clerk CLI) and `CLERK_SECRET_KEY` from the Clerk application.
-- `CLERK_ISSUER` and `CLERK_JWKS_URL` from that application's JWT/JWKS
-  configuration.
-- `CLERK_AUTHORIZED_PARTIES` as a comma-separated list of trusted frontend
-  origins (locally, `http://localhost:3000`).
+Required Clerk settings include:
 
-The frontend keys, issuer, and JWKS URL must all belong to the same Clerk
-instance. Clerk development keys are suitable for local testing, but not for
-production deployments.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `CLERK_JWKS_URL`
+- `CLERK_ISSUER`
+- `CLERK_AUTHORIZED_PARTIES`
 
-The Next.js app provides `/sign-in`, `/sign-up`, and protected dashboard,
-workspace, course, learning, research, coding, and administration pages.
-FastAPI validates the bearer token signature, issuer, expiration, and
-authorized party before provisioning or resolving a local `users` record.
-Roles are stored server-side as `student`, `professor`, or `administrator`;
-new users default to `student`. To bootstrap initial administrators, set
-`ADMIN_CLERK_USER_IDS` to a comma-separated list of Clerk user IDs before those
-users first sign in. Administrators can list users and update roles through
-`GET /api/v1/users` and `PATCH /api/v1/users/{clerk_user_id}/role`. The API does
-not accept role claims or course permissions from browser input.
+New users receive the `student` role. Initial administrators can be configured through `ADMIN_CLERK_USER_IDS`. Subsequent role changes and privileged operations are restricted to server-side administrator authorization.
 
-The Clerk provider can display development keyless setup if no frontend key is
-configured. API-authenticated features require the issuer, JWKS URL, and
-authorized-party settings; protected API requests fail closed until these are
-configured. Password recovery and MFA are managed by Clerk.
+The API does not trust browser-supplied roles or course scopes. Document and course permissions are derived from ownership, enrollment, professor assignments, or administrator status.
 
-## Quality checks
+## AI and RAG architecture
 
-The current test and evaluation coverage, reproducible commands, measured
-results status, and known Phase 6 gaps are recorded in
-[Testing, evaluation, and security](docs/testing-evaluation-security.md).
+The retrieval implementation is kept in `ai/rag` and model/provider abstractions in `ai/models`, allowing the API and evaluation tools to share common interfaces.
 
-To run the paired direct-RAG/supervisor experiment after preparing and
-reviewing its academic question set, see the runbook for installing the
-optional Ragas evaluation dependencies and producing per-question JSONL/CSV,
-aggregate JSON, charts, and a Markdown report.
+Key retrieval behaviors include:
+
+- Multi-format document parsing
+- Chunking and vector generation
+- pgvector persistence
+- Optional reranking
+- Document ownership and course-level access filtering
+- Cited response metadata
+- Prompt isolation and retrieval-context defense-in-depth
+
+The agent workflow is implemented with LangGraph. Routing selects one or more specialists, execution events are recorded, and checkpoints and conversation state are persisted for continuity.
+
+### Optional benchmark
+
+The repository includes a paired direct-RAG/supervisor evaluator that records retrieval metrics, route matches, citation validity, latency, and optional Ragas measurements.
+
+No approved 50–100 question university corpus or manually reviewed paired benchmark results are currently included. Generated placeholders must not be presented as measured answer quality or factual accuracy. See [Testing, evaluation, and security](docs/testing-evaluation-security.md) before reporting results.
+
+## Testing and quality
+
+Run the frontend quality suite:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
+```
+
+This runs frontend linting, type checking, and Vitest tests. Run browser tests separately:
+
+```bash
+PLAYWRIGHT_CHANNEL=chrome \
+PLAYWRIGHT_TEST_BASE_URL=http://localhost:3000 \
+pnpm --filter web test:e2e
+```
+
+Run backend static checks and tests:
+
+```bash
 cd services/ai-api
 uv sync --frozen
 uv run ruff check . ../../ai
-uv run pytest
+uv run pytest -q
 ```
 
-For the full Docker health check, use `docker compose up --build -d`, then
-`docker compose ps`; the five long-running services should report healthy
-(the `migrate` and `sandbox-image` one-shot services exit successfully). Verify
-the extension with:
+The CI workflow also validates:
 
-```bash
-docker compose exec postgres sh -c \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT extversion FROM pg_extension WHERE extname = '\''vector'\'';"'
-```
+- Locked pnpm dependencies
+- Frontend lint, types, tests, and build
+- Python formatting and lint rules
+- Backend tests
+- Alembic upgrades against PostgreSQL with pgvector
+- Docker image builds
 
-## Optional Hugging Face inference
+Coverage includes authentication and role checks, document ownership and course scoping, upload validation, agent routing and retries, checkpoint state, API errors, and rate limiting.
 
-The default install supports parsing, persistence, retrieval interfaces, and
-Hugging Face Hub metadata inspection without importing PyTorch. To enable local
-embeddings and reranking:
+## Deployment
 
-```bash
-cd services/ai-api
-uv sync --frozen --group inference
-```
+Supported deployment patterns include:
 
-This installs CPU PyTorch only. BGE-M3 and the reranker download weights on
-first use; no model is downloaded during setup. Configure model IDs and the
-CPU batch size with `HF_EMBEDDING_MODEL`, `HF_EMBEDDING_DIMENSIONS`,
-`HF_RERANKER_MODEL`, `HF_DEVICE`, and `HF_BATCH_SIZE`. Use a reachable Ollama
-instance for generation (`OLLAMA_BASE_URL` and `OLLAMA_MODEL`).
+- Local Docker Compose
+- Production-oriented Docker Compose with immutable GHCR images
+- Kubernetes using Kustomize overlays
+- GitHub Actions CI/CD and image publishing
+- Manual application rollback
+- Prometheus and Grafana monitoring
 
-Authenticated private-document endpoints are available at
-`POST/GET /api/v1/documents`, `DELETE /api/v1/documents/{document_id}`, and
-`POST /api/v1/documents/search`. The protected `/workspace` page combines
-upload, library management, semantic search, and the existing multi-agent chat
-stream with citations. Documents are scoped to the verified Clerk user.
-Course-specific access is derived from professor ownership, active student
-enrollment, or administrator access; browser-supplied course scopes are never
-trusted. The Python RAG service accepts trusted `owner_id` and
-`allowed_course_ids`. See
-[RAG architecture and usage](docs/architecture/rag.md).
+The production Compose and Kubernetes configurations require externally provisioned secrets and infrastructure. PostgreSQL and Redis StatefulSets are single-instance configurations; managed services or separately designed high availability are recommended for production availability requirements.
 
-## Academic application modules
+See [Deployment and operations](docs/deployment.md) for infrastructure prerequisites, secret handling, image publishing, Kubernetes, monitoring, and rollback procedures.
 
-The authenticated application includes workspace and course management,
-student enrollment, professor course assignments and quizzes, task tracking,
-AI-generated practice quizzes and timed mock exams, adaptive study-plan
-rescheduling, Crossref paper search
-and a per-user saved bibliography, and a Coding Agent interface for tutoring,
-generation, review, debugging, and challenge feedback. `CROSSREF_MAILTO` is an
-optional contact address for polite Crossref API usage. Role changes are
-administrator-only; self-demotion and removal of the final administrator are
-rejected.
+## Security considerations
 
-The Learning Studio also persists AI-generated lessons per user. Its current
-learning API behavior and persistence boundaries are documented in
-[Learning and planning API](docs/api/learning.md); flashcard generation remains
-session-only.
-Crossref searches are retained as per-user history, saved papers can receive
-metadata-and-abstract summaries, and selected saved papers can be compared.
-See
-[Research API](docs/api/research.md) for the routes and evidence limitations.
-The dashboard also allows users to edit app-owned academic profile fields;
-Clerk remains responsible for authentication and email. See
-[User profile API](docs/api/users.md).
+- Clerk JWT signature, issuer, expiration, and authorized-party checks
+- Server-side role resolution and protected route authorization
+- Database-derived ownership and course access controls
+- Redis-backed fixed-window API rate limiting
+- Redis failure handling that fails closed rather than silently disabling protection
+- Restricted document upload parsing and file validation
+- Prompt-context isolation and injection phrase detection as defense in depth
+- Network-disabled code execution containers with CPU, memory, process, timeout, and output limits
 
-The Coding Agent can execute Python in a short-lived container with no network,
-read-only root filesystem, a non-root identity, and CPU, memory, process,
-time, and output limits; only the standard library is available. The runner
-needs access to a Docker Engine socket, which is effectively host-root
-authority. Use a dedicated, preferably rootless Docker host for untrusted
-submissions; do not expose the runner or share that daemon with sensitive
-workloads. The dashboard provides task, course, quiz,
-deadline, and agent-run summaries with persistent in-app notifications.
-Professors can review course learning activity; administrators can manage
-workspaces, allowlisted feature flags, and audit records. Notifications are
-in-app only (no push delivery). Quiz generation validates the requested item
-count and requires four non-empty, distinct choices with the answer among
-them; invalid model output returns an upstream error and is not saved.
+The Docker-socket-backed code runner is effectively host-root authority. It is not a production-ready untrusted execution boundary. Run production workloads with dedicated, preferably rootless, isolated infrastructure rather than exposing a host Docker socket.
 
-Local verification has confirmed student sign-in and access to the profile,
-dashboard, and notifications, with student access to administrator endpoints
-denied. This used Clerk development keys. A real Qwen 2.5 3B streaming request
-and a PDF upload, indexing, semantic search, and cited chat answer have also
-been exercised. Live component checks also confirmed Crossref metadata lookup,
-one quiz output with four distinct choices, a generated three-task study plan
-that fit the supplied daily capacity, and a harmless code snippet returning
-`42` through the isolated runner. A separate quiz generation returned invalid
-choices and was rejected by validation. These component checks do not
-establish production Clerk authentication or a complete student, professor,
-and administrator workflow. Professor and administrator end-to-end flows,
-authenticated quiz submission and study-plan save flows, and security of a
-production code runner remain to be verified against the configured stack.
+Additional hardening and operational requirements are documented in [Testing, evaluation, and security](docs/testing-evaluation-security.md).
 
-## Branch and commit conventions
+## Project status
 
-Use `main` for stable releases and `develop` for integration. Create focused
-branches from `develop` using `feat/<topic>`, `fix/<topic>`,
-`docs/<topic>`, or `chore/<topic>`. Write commits in the
-Conventional Commits format (for example `feat(api): add readiness checks`).
+The repository contains a functional local/full-stack prototype and reproducible infrastructure configurations. The following items should be communicated accurately:
+
+- Human-approved academic benchmark questions and paired answer-quality results are not yet included.
+- Professor and administrator flows require more complete end-to-end verification.
+- The optional code runner has been tested locally, but production isolation remains an infrastructure gap.
+- PostgreSQL/Redis integration and real-model checks require reachable services and model weights.
+- Push notifications, automated human approval interrupts, and high-availability data stores are not included.
+
+These boundaries are intentionally documented rather than represented as completed production guarantees.
+
+## Documentation
+
+### Architecture and APIs
+
+- [Architecture overview](docs/architecture/overview.md)
+- [RAG architecture](docs/architecture/rag.md)
+- [Architecture diagrams](docs/architecture/diagrams.md)
+- [API overview](docs/api/README.md)
+- [Learning and planning API](docs/api/learning.md)
+- [Research API](docs/api/research.md)
+- [User profile API](docs/api/users.md)
+
+### Operations and quality
+
+- [Deployment and operations](docs/deployment.md)
+- [Testing, evaluation, and security](docs/testing-evaluation-security.md)
+- [Technical report](docs/report/technical-report.md)
+- [Experimental evaluation report](docs/evaluation/experimental-evaluation-report.md)
+
+### User guides
+
+- [Installation guide](docs/user/installation-guide.md)
+- [Developer guide](docs/user/developer-guide.md)
+- [Student guide](docs/user/student-guide.md)
+- [Professor guide](docs/user/professor-guide.md)
+- [Administrator guide](docs/user/administrator-guide.md)
+- [Troubleshooting guide](docs/user/troubleshooting-guide.md)
+
+## Contributing
+
+1. Create an integration branch from `develop`.
+2. Use focused branch names: `feat/<topic>`, `fix/<topic>`, `docs/<topic>`, or `chore/<topic>`.
+3. Keep changes scoped and add focused tests for behavior changes.
+4. Run `pnpm check` and the backend Ruff/pytest commands before submitting.
+5. Use Conventional Commit messages, for example `feat(api): add readiness checks`.
+6. Do not commit secrets, local environment files, model caches, databases, or generated test artifacts.
+
+For code-specific setup, inspect the service and workspace documentation and keep changes consistent with the existing module boundaries.
