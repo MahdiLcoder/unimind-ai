@@ -43,6 +43,8 @@ htmlcov/
 # Temporary files
 tmp/
 temp/
+/backups/
+/.secrets/
 
 # Playwright artifacts
 apps/web/test-results/

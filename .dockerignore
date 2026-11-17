@@ -12,5 +12,10 @@
 **/.ruff_cache
 **/*.py[cod]
 **/*.tsbuildinfo
+**/test-results
+**/playwright-report
+.github
+tmp
+temp
 coverage
 dist
