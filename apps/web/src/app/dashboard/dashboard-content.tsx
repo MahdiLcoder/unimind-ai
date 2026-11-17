@@ -3,6 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -133,6 +134,7 @@ const roleLabels: Record<UserProfile["role"], string> = {
 export default function DashboardPage() {
   const { getToken, isLoaded: authLoaded } = useAuth();
   const { user, isLoaded: userLoaded } = useUser();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [profileDraft, setProfileDraft] = useState<ProfileDraftState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -671,7 +673,7 @@ export default function DashboardPage() {
                             description="Agent runs initiated in the Workspace or Coding lab will appear here."
                             actionLabel="Open Workspace"
                             onAction={() => {
-                              window.location.href = "/workspace";
+                              router.push("/workspace");
                             }}
                           />
                         </div>
@@ -764,7 +766,7 @@ export default function DashboardPage() {
                             description="Start a workflow in Workspace or Coding Lab."
                             actionLabel="Open Workspace"
                             onAction={() => {
-                              window.location.href = "/workspace";
+                              router.push("/workspace");
                             }}
                           />
                         </div>

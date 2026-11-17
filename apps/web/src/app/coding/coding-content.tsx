@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
