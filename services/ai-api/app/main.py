@@ -22,7 +22,10 @@ from app.api import (
 from app.core.cache import redis_client
 from app.core.config import settings
 from app.core.database import engine
+from app.core.observability import RequestObservabilityMiddleware, configure_logging
 from app.core.rate_limit import RedisRateLimitMiddleware
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -51,6 +54,7 @@ app = FastAPI(
 )
 
 app.add_middleware(RedisRateLimitMiddleware)
+app.add_middleware(RequestObservabilityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

@@ -13,6 +13,7 @@ from ai.agents.schemas import (
 )
 from ai.agents.service import AgentService
 from ai.graphs.agent_workflows import AgentGraphs, create_agent_graphs
+from ai.telemetry import REGISTRY
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -128,6 +129,12 @@ async def test_supervisor_routes_knowledge_and_learning_requests() -> None:
         if event["event_type"] == "response_ready"
     )
     assert response_event["metadata"]["sources"] == [{"citation": "[doc:1234]"}]
+    success_count = REGISTRY.get_sample_value(
+        "unimind_agent_executions_total",
+        {"agent": "knowledge", "outcome": "success"},
+    )
+    assert success_count is not None
+    assert success_count >= 1
 
 
 @pytest.mark.asyncio

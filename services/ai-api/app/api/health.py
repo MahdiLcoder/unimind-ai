@@ -1,12 +1,17 @@
+import hmac
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from ai.telemetry import REGISTRY
+from fastapi import APIRouter, Header, HTTPException, status
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.responses import Response
 
 from app.core.cache import redis_client
+from app.core.config import settings
 from app.core.database import engine
 
 logger = logging.getLogger(__name__)
@@ -21,6 +26,19 @@ class ReadinessResponse(BaseModel):
 @router.get("/health/live")
 async def liveness() -> dict[str, str]:
     return {"status": "alive"}
+
+
+@router.get("/metrics", include_in_schema=False)
+async def metrics(authorization: str | None = Header(default=None)) -> Response:
+    configured_token = settings.metrics_bearer_token
+    if configured_token is not None and configured_token.get_secret_value():
+        expected = f"Bearer {configured_token.get_secret_value()}"
+        if authorization is None or not hmac.compare_digest(
+            authorization.encode("utf-8"),
+            expected.encode("utf-8"),
+        ):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/health")

@@ -27,6 +27,36 @@ def test_liveness_is_independent_of_dependencies() -> None:
     assert response.json() == {"status": "alive"}
 
 
+def test_request_correlation_id_is_returned() -> None:
+    request_id = "0192bf8e-fc6e-7db1-aea8-2326ff210e14"
+    with TestClient(app) as client:
+        response = client.get(
+            "/health/live",
+            headers={"X-Request-ID": request_id},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == request_id
+
+
+def test_metrics_endpoint_requires_configured_bearer_token(monkeypatch) -> None:
+    from pydantic import SecretStr
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "metrics_bearer_token", SecretStr("metrics-secret"))
+    with TestClient(app) as client:
+        unauthorized = client.get("/metrics")
+        authorized = client.get(
+            "/metrics",
+            headers={"Authorization": "Bearer metrics-secret"},
+        )
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+    assert "unimind_http_requests_total" in authorized.text
+
+
 def test_legacy_health_endpoint_remains_available() -> None:
     with TestClient(app) as client:
         response = client.get("/health")

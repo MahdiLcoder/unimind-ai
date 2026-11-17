@@ -23,6 +23,7 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0,<4",
     "psycopg[binary,pool]>=3.2,<4",
     "pyjwt[crypto]>=2.10,<3",
+    "prometheus-client>=0.23,<1",
     "python-multipart>=0.0.20,<1",
 ]
 

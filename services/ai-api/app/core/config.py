@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
+    metrics_bearer_token: SecretStr | None = None
     cors_origins: str = "http://localhost:3000"
     clerk_jwks_url: str | None = None
     clerk_issuer: str | None = None

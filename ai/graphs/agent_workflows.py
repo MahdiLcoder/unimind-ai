@@ -18,6 +18,7 @@ from ai.agents.learning import LearningAgent
 from ai.agents.routing import route_request
 from ai.agents.schemas import AgentName, Intent, RoutingDecision
 from ai.state.agent import AgentState
+from ai.telemetry import AGENT_EXECUTION_DURATION, AGENT_EXECUTIONS
 
 logger = logging.getLogger(__name__)
 _MAX_RETRIES = 1
@@ -116,14 +117,31 @@ def create_agent_graphs(
                     "retry_count": state.get("retry_count", 0),
                 },
             )
+            AGENT_EXECUTIONS.labels(agent_name.value, "success").inc()
+            duration = perf_counter() - started
+            AGENT_EXECUTION_DURATION.labels(agent_name.value).observe(duration)
+            logger.info(
+                "agent_execution_completed",
+                extra={
+                    "agent": agent_name.value,
+                    "request_id": state["request_id"],
+                    "duration_seconds": round(duration, 6),
+                    "outcome": "success",
+                },
+            )
             return {**result, "events": [event]}
         except Exception as exc:
+            AGENT_EXECUTIONS.labels(agent_name.value, "failure").inc()
+            duration = perf_counter() - started
+            AGENT_EXECUTION_DURATION.labels(agent_name.value).observe(duration)
             logger.exception(
                 "Agent execution failed",
                 extra={
                     "agent": agent_name.value,
                     "request_id": state["request_id"],
                     "error_type": type(exc).__name__,
+                    "duration_seconds": round(duration, 6),
+                    "outcome": "failure",
                 },
             )
             error_code = "agent_execution_failed"
