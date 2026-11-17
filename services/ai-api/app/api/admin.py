@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +14,7 @@ from app.api.courses import WorkspaceResponse
 from app.core.database import get_db_session
 from app.core.platform import DEFAULT_PLATFORM_FLAGS, add_audit_log
 from app.models.academic import Course, Workspace
+from app.models.conversations import AgentRun, AgentStep
 from app.models.documents import Document
 from app.models.platform import AuditLog, PlatformSetting
 from app.models.users import User, UserRole
@@ -51,6 +52,37 @@ class AuditLogResponse(BaseModel):
 
 class AdminWorkspaceResponse(WorkspaceResponse):
     course_count: int
+
+
+class AgentStepResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    event_type: str
+    agent_name: str | None
+    message: str
+    metadata_json: dict[str, object]
+    created_at: datetime
+
+
+class AgentRunResponse(BaseModel):
+    id: UUID
+    request_id: UUID
+    conversation_id: UUID
+    user_id: str
+    status: str
+    error_message: str | None
+    created_at: datetime
+    finished_at: datetime | None
+    steps: list[AgentStepResponse]
+
+
+class AgentRunsResponse(BaseModel):
+    items: list[AgentRunResponse]
+    total_count: int
+    running_count: int
+    completed_count: int
+    failed_count: int
 
 
 @router.get("/features", response_model=PlatformFeaturesResponse)
@@ -185,3 +217,71 @@ async def list_audit_logs(
         .offset(offset)
     )
     return [AuditLogResponse.model_validate(row) for row in rows]
+
+
+@router.get("/agent-runs", response_model=AgentRunsResponse)
+async def list_agent_runs(
+    _admin: AdminUser,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    status_filter: Annotated[
+        Literal["running", "completed", "failed"] | None,
+        Query(alias="status"),
+    ] = None,
+) -> AgentRunsResponse:
+    counts = {
+        run_status: count
+        for run_status, count in (
+            await session.execute(
+                select(AgentRun.status, func.count(AgentRun.id)).group_by(
+                    AgentRun.status
+                )
+            )
+        ).all()
+    }
+    query = select(AgentRun)
+    count_query = select(func.count(AgentRun.id))
+    if status_filter is not None:
+        query = query.where(AgentRun.status == status_filter)
+        count_query = count_query.where(AgentRun.status == status_filter)
+    total_count = await session.scalar(count_query)
+    runs = list(
+        await session.scalars(
+            query.order_by(AgentRun.created_at.desc(), AgentRun.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    )
+    run_ids = [run.id for run in runs]
+    steps_by_run: dict[UUID, list[AgentStepResponse]] = {
+        run_id: [] for run_id in run_ids
+    }
+    if run_ids:
+        steps = await session.scalars(
+            select(AgentStep)
+            .where(AgentStep.run_id.in_(run_ids))
+            .order_by(AgentStep.created_at, AgentStep.id)
+        )
+        for step in steps:
+            steps_by_run[step.run_id].append(AgentStepResponse.model_validate(step))
+    return AgentRunsResponse(
+        items=[
+            AgentRunResponse(
+                id=run.id,
+                request_id=run.request_id,
+                conversation_id=run.conversation_id,
+                user_id=run.user_id,
+                status=run.status,
+                error_message=run.error_message,
+                created_at=run.created_at,
+                finished_at=run.finished_at,
+                steps=steps_by_run[run.id],
+            )
+            for run in runs
+        ],
+        total_count=total_count or 0,
+        running_count=counts.get("running", 0),
+        completed_count=counts.get("completed", 0),
+        failed_count=counts.get("failed", 0),
+    )

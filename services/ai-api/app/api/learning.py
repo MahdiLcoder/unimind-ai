@@ -198,6 +198,20 @@ class QuizGenerationRequest(BaseModel):
     published: bool = False
 
 
+class FlashcardGenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(min_length=3, max_length=1000)
+    card_count: int = Field(default=10, ge=1, le=30)
+    course_id: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class FlashcardResponse(BaseModel):
+    front: str
+    back: str
+    hint: str
+
+
 class QuizQuestionResponse(BaseModel):
     id: UUID
     position: int
@@ -816,6 +830,57 @@ async def generate_quiz(
     await session.commit()
     await session.refresh(quiz)
     return await _quiz_response(session, quiz)
+
+
+@router.post(
+    "/flashcards/generate",
+    response_model=list[FlashcardResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_flashcards(
+    body: FlashcardGenerationRequest,
+    service: Annotated[AgentService, Depends(get_agent_service)],
+    principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
+) -> list[FlashcardResponse]:
+    if body.course_id and body.course_id not in principal.allowed_course_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course was not found",
+        )
+    request = make_agent_request(
+        principal,
+        conversation_id=uuid4(),
+        request_id=uuid4(),
+        course_id=body.course_id,
+        message=(
+            f"Create exactly {body.card_count} study flashcards about: "
+            f"{body.topic.strip()}. Set mode to flashcard. Return one concise "
+            "concept or question in each item prompt, its accurate answer, "
+            "and a brief helpful hint in the explanation. Do not return quiz choices."
+        ),
+    )
+    state = await service.invoke_learning(request)
+    raw_learning = state.get("agent_outputs", {}).get("learning", {})
+    try:
+        generated = _learning_response_from_agent_output(raw_learning)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The learning model returned invalid flashcards",
+        ) from exc
+    if generated.mode.casefold() != "flashcard" or len(generated.items) != body.card_count:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The learning model did not return the requested flashcards",
+        )
+    return [
+        FlashcardResponse(
+            front=item.prompt,
+            back=item.answer,
+            hint=item.explanation,
+        )
+        for item in generated.items
+    ]
 
 
 def _learning_response_from_agent_output(

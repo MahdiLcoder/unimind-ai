@@ -113,11 +113,13 @@ def test_students_cannot_read_platform_features_or_audit_logs() -> None:
         with _client(PlatformSession(), role="student") as client:
             features = client.get("/api/v1/admin/features")
             logs = client.get("/api/v1/admin/audit-logs")
+            agent_runs = client.get("/api/v1/admin/agent-runs")
     finally:
         _clear_overrides()
 
     assert features.status_code == 403
     assert logs.status_code == 403
+    assert agent_runs.status_code == 403
 
 
 def test_notification_read_state_is_saved_and_user_owned() -> None:

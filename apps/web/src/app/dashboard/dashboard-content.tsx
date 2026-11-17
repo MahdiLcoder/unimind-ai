@@ -20,6 +20,7 @@ import {
   CheckCircle,
   ArrowRight,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
@@ -92,10 +93,24 @@ const notificationsSchema = z.object({
   ),
   unread_count: z.number(),
 });
+const teachingCourseSchema = z.object({ id: z.string() });
+const courseLearningOverviewSchema = z.object({
+  course_id: z.string(),
+  active_students: z.number(),
+  assignments: z.number(),
+  assignment_completions: z.number(),
+  quiz_attempts: z.number(),
+  average_quiz_score_percent: z.number().nullable(),
+});
 
 type UserProfile = z.infer<typeof userProfileSchema>;
 type DashboardSummary = z.infer<typeof dashboardSummarySchema>;
 type Notifications = z.infer<typeof notificationsSchema>;
+type TeachingMetrics = {
+  enrolledStudents: number;
+  pendingAssignments: number;
+  averageQuizScore: number | null;
+};
 
 const roleLabels: Record<UserProfile["role"], string> = {
   student: "Student",
@@ -109,6 +124,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [notifications, setNotifications] = useState<Notifications | null>(null);
+  const [teachingMetrics, setTeachingMetrics] = useState<TeachingMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
@@ -125,11 +141,44 @@ export default function DashboardPage() {
           apiRequest("/api/v1/notifications", notificationsSchema, { accessToken }),
         ]);
       })
-      .then(([currentUser, currentSummary, currentNotifications]) => {
+      .then(async ([currentUser, currentSummary, currentNotifications]) => {
         if (active) {
           setProfile(currentUser);
           setSummary(currentSummary);
           setNotifications(currentNotifications);
+        }
+        if (currentUser.role === "professor") {
+          const accessToken = await getToken();
+          if (!accessToken) throw new Error("No active session token was returned");
+          const courseList = await apiRequest(
+            "/api/v1/courses",
+            z.array(teachingCourseSchema),
+            { accessToken }
+          );
+          const overviews = await Promise.all(
+            courseList.map((course) =>
+              apiRequest(
+                `/api/v1/courses/${course.id}/learning-overview`,
+                courseLearningOverviewSchema,
+                { accessToken }
+              )
+            )
+          );
+          const quizAttempts = overviews.reduce((total, item) => total + item.quiz_attempts, 0);
+          const weightedQuizScore = overviews.reduce(
+            (total, item) => total + (item.average_quiz_score_percent ?? 0) * item.quiz_attempts,
+            0
+          );
+          if (active) {
+            setTeachingMetrics({
+              enrolledStudents: overviews.reduce((total, item) => total + item.active_students, 0),
+              pendingAssignments: overviews.reduce(
+                (total, item) => total + Math.max(0, item.assignments * item.active_students - item.assignment_completions),
+                0
+              ),
+              averageQuizScore: quizAttempts > 0 ? weightedQuizScore / quizAttempts : null,
+            });
+          }
         }
       })
       .catch((cause: unknown) => {
@@ -317,13 +366,23 @@ export default function DashboardPage() {
           <section aria-labelledby="overview-heading" className="mt-8">
             <div className="flex items-center justify-between mb-3">
               <h2 id="overview-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Academic Progress & Activity
+                {profile?.role === "professor" ? "Teaching Overview" : "Academic Progress & Activity"}
               </h2>
               <span className="text-xs text-muted-foreground">Current semester</span>
             </div>
 
-            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {[
+            <dl className={`grid gap-3 sm:grid-cols-2 ${profile?.role === "professor" ? "lg:grid-cols-3" : "lg:grid-cols-5"}`}>
+              {(profile?.role === "professor"
+                ? [
+                    { label: "Total enrolled students", value: teachingMetrics?.enrolledStudents ?? "—", icon: Users },
+                    { label: "Pending assignments", value: teachingMetrics?.pendingAssignments ?? "—", icon: Clock },
+                    {
+                      label: "Average course quiz score",
+                      value: teachingMetrics?.averageQuizScore == null ? "—" : `${Math.round(teachingMetrics.averageQuizScore)}%`,
+                      icon: TrendingUp,
+                    },
+                  ]
+                : [
                 { label: "Courses", value: summary.course_count, icon: BookOpen },
                 { label: "Open tasks", value: summary.open_task_count, icon: Clock },
                 { label: "Completed tasks", value: summary.completed_task_count, icon: CheckCircle },
@@ -333,7 +392,7 @@ export default function DashboardPage() {
                   value: summary.average_quiz_score_percent === null ? "—" : `${Math.round(summary.average_quiz_score_percent)}%`,
                   icon: TrendingUp,
                 },
-              ].map(({ label, value, icon: Icon }) => (
+              ]).map(({ label, value, icon: Icon }) => (
                 <Card key={label} className="p-4">
                   <dt className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                     <span>{label}</span>

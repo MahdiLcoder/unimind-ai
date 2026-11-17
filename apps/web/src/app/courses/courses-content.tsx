@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -13,8 +13,11 @@ import {
   Layers,
   ArrowRight,
   TrendingUp,
+  FileText,
+  Upload,
+  Trash2,
 } from "lucide-react";
-import { apiRequest } from "@/lib/api";
+import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -58,6 +61,23 @@ const enrollmentSchema = z.object({
   status: z.string(),
   enrolled_at: z.string(),
 });
+const rosterEnrollmentSchema = enrollmentSchema.extend({
+  email: z.string().nullable(),
+  completed_tasks_count: z.number(),
+  average_quiz_score: z.number().nullable(),
+});
+const courseDocumentSchema = z.object({
+  id: z.string().uuid(),
+  source_filename: z.string(),
+  title: z.string().nullable(),
+  course_id: z.string().nullable(),
+  created_at: z.string(),
+});
+const uploadResponseSchema = z.object({
+  id: z.string().uuid(),
+  source_filename: z.string(),
+  status: z.string(),
+});
 const taskSchema = z.object({
   id: z.string().uuid(),
   owner_id: z.string().nullable(),
@@ -100,9 +120,13 @@ export default function CoursesContent() {
   const [courseWorkspace, setCourseWorkspace] = useState("");
   const [courseCode, setCourseCode] = useState("");
   const [courseName, setCourseName] = useState("");
+  const [courseDocuments, setCourseDocuments] = useState<z.infer<typeof courseDocumentSchema>[]>([]);
+  const [materialCourseId, setMaterialCourseId] = useState("");
+  const [uploadingMaterial, setUploadingMaterial] = useState(false);
   const [assignmentTitles, setAssignmentTitles] = useState<Record<string, string>>({});
   const [assignmentDues, setAssignmentDues] = useState<Record<string, string>>({});
-  const [rosters, setRosters] = useState<Record<string, string[]>>({});
+  const [rosters, setRosters] = useState<Record<string, z.infer<typeof rosterEnrollmentSchema>[]>>({});
+  const materialFileInput = useRef<HTMLInputElement>(null);
   const [overviews, setOverviews] = useState<Record<string, Overview>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,14 +136,17 @@ export default function CoursesContent() {
   const load = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No active session token was returned");
-    const [profile, courseList, workspaceList] = await Promise.all([
+    const [profile, courseList, workspaceList, documentList] = await Promise.all([
       apiRequest("/api/v1/users/me", profileSchema, { accessToken: token }),
       apiRequest("/api/v1/courses", z.array(courseSchema), { accessToken: token }),
       apiRequest("/api/v1/workspaces", z.array(workspaceSchema), { accessToken: token }),
+      apiRequest("/api/v1/documents", z.array(courseDocumentSchema), { accessToken: token }),
     ]);
     setRole(profile.role);
     setCourses(courseList);
     setWorkspaces(workspaceList);
+    setCourseDocuments(documentList.filter((document) => document.course_id !== null));
+    setMaterialCourseId((selected) => selected || courseList[0]?.id || "");
     setCourseWorkspace((selected) => selected || workspaceList[0]?.id || "");
   }, [getToken]);
 
@@ -244,14 +271,58 @@ export default function CoursesContent() {
       const token = await accessToken();
       const roster = await apiRequest(
         `/api/v1/courses/${course.id}/enrollments`,
-        z.array(enrollmentSchema),
+        z.array(rosterEnrollmentSchema),
         { accessToken: token }
       );
       setRosters((current) => ({
         ...current,
-        [course.id]: roster.map((enrollment) => enrollment.student_id),
+        [course.id]: roster,
       }));
       toast.info(`Loaded roster for ${course.code}`);
+    } catch (cause) {
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function uploadCourseMaterial(file: File) {
+    setUploadingMaterial(true);
+    setError(null);
+    try {
+      if (!materialCourseId) throw new Error("Select a course before uploading materials");
+      const token = await accessToken();
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("course_id", materialCourseId);
+      await apiRequest("/api/v1/documents", uploadResponseSchema, {
+        method: "POST",
+        body: formData,
+        accessToken: token,
+      });
+      await load();
+      toast.success(`Uploaded ${file.name} to course materials`);
+    } catch (cause) {
+      const err = errorMessage(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setUploadingMaterial(false);
+      if (materialFileInput.current) materialFileInput.current.value = "";
+    }
+  }
+
+  async function deleteCourseMaterial(document: z.infer<typeof courseDocumentSchema>) {
+    setError(null);
+    try {
+      const token = await accessToken();
+      const response = await apiFetch(`/api/v1/documents/${document.id}`, {
+        method: "DELETE",
+        accessToken: token,
+      });
+      if (!response.ok) throw new Error(`Could not delete document (${response.status})`);
+      setCourseDocuments((current) => current.filter((item) => item.id !== document.id));
+      toast.success(`Deleted ${document.source_filename}`);
     } catch (cause) {
       const err = errorMessage(cause);
       setError(err);
@@ -352,6 +423,7 @@ export default function CoursesContent() {
                 {canManageCourses ? "Your courses" : "Enrolled courses"}
               </TabsTrigger>
               {role === "student" && <TabsTrigger value="catalog">Browse Catalog</TabsTrigger>}
+              {canManageCourses && <TabsTrigger value="materials">Course Materials</TabsTrigger>}
               {canManageCourses && <TabsTrigger value="manage">Manage Workspaces & Courses</TabsTrigger>}
             </TabsList>
 
@@ -519,13 +591,42 @@ export default function CoursesContent() {
                             )}
 
                             {rosters[course.id] && (
-                              <ul className="space-y-1 text-xs text-muted-foreground rounded-lg border p-3">
-                                <li className="font-semibold text-foreground mb-1">Roster:</li>
-                                {rosters[course.id].map((studentId) => (
-                                  <li key={studentId} className="font-mono text-[11px]">{studentId}</li>
-                                ))}
-                                {rosters[course.id].length === 0 && <li>No active enrollments.</li>}
-                              </ul>
+                              <div className="overflow-x-auto rounded-lg border">
+                                <table className="w-full min-w-[38rem] text-left text-xs">
+                                  <thead className="border-b bg-muted/40">
+                                    <tr>
+                                      <th className="p-2 font-semibold">Student</th>
+                                      <th className="p-2 font-semibold">Enrolled</th>
+                                      <th className="p-2 font-semibold">Completed assignments</th>
+                                      <th className="p-2 font-semibold">Average quiz</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y">
+                                    {rosters[course.id].map((enrollment) => (
+                                      <tr key={enrollment.student_id}>
+                                        <td className="p-2">
+                                          <p>{enrollment.email ?? "No email available"}</p>
+                                          <p className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">
+                                            {enrollment.student_id}
+                                          </p>
+                                        </td>
+                                        <td className="p-2 text-muted-foreground">
+                                          {new Date(enrollment.enrolled_at).toLocaleDateString()}
+                                        </td>
+                                        <td className="p-2">{enrollment.completed_tasks_count}</td>
+                                        <td className="p-2">
+                                          {enrollment.average_quiz_score === null
+                                            ? "No attempts"
+                                            : `${Math.round(enrollment.average_quiz_score)}%`}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {rosters[course.id].length === 0 && (
+                                      <tr><td className="p-3 text-center text-muted-foreground" colSpan={4}>No active enrollments.</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
                             )}
                           </div>
                         )}
@@ -535,6 +636,91 @@ export default function CoursesContent() {
                 </div>
               </section>
             </TabsContent>
+
+            {canManageCourses && (
+              <TabsContent value="materials" className="mt-6">
+                <Card className="p-6">
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold">Course materials</h2>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Documents are indexed and shared with students enrolled in the selected course.
+                      </p>
+                    </div>
+                    <label className="grid gap-1 text-xs font-medium">
+                      Course
+                      <select
+                        aria-label="Course for materials"
+                        className="h-9 min-w-56 rounded-md border border-input bg-background px-2 text-sm"
+                        onChange={(event) => setMaterialCourseId(event.target.value)}
+                        value={materialCourseId}
+                      >
+                        {courses.map((course) => (
+                          <option key={course.id} value={course.id}>{course.code} · {course.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <input
+                    accept=".pdf,.docx,.txt,.md"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      if (file) void uploadCourseMaterial(file);
+                    }}
+                    ref={materialFileInput}
+                    type="file"
+                  />
+                  <Button
+                    className="mt-5 gap-2"
+                    disabled={uploadingMaterial || courses.length === 0}
+                    onClick={() => materialFileInput.current?.click()}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Upload className="size-4" />
+                    {uploadingMaterial ? "Uploading and indexing…" : "Upload course document"}
+                  </Button>
+                  <p className="mt-2 text-xs text-muted-foreground">PDF, DOCX, TXT, or Markdown · up to 20 MB</p>
+
+                  <ul className="mt-6 divide-y rounded-lg border">
+                    {courseDocuments
+                      .filter((document) => document.course_id === materialCourseId)
+                      .map((document) => (
+                        <li className="flex flex-wrap items-center justify-between gap-3 p-3" key={document.id}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <FileText className="size-4 shrink-0 text-primary" />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
+                                {document.title ?? document.source_filename}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Indexed {new Date(document.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            aria-label={`Delete ${document.source_filename}`}
+                            className="text-destructive"
+                            onClick={() => void deleteCourseMaterial(document)}
+                            size="xs"
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Trash2 className="size-3.5" /> Delete
+                          </Button>
+                        </li>
+                      ))}
+                    {courseDocuments.filter((document) => document.course_id === materialCourseId).length === 0 && (
+                      <li className="p-6 text-center text-sm text-muted-foreground">
+                        No course documents have been uploaded yet.
+                      </li>
+                    )}
+                  </ul>
+                </Card>
+              </TabsContent>
+            )}
 
             {/* Catalog Search Tab */}
             {role === "student" && (

@@ -5,13 +5,13 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from app.models.documents import EMBEDDING_DIMENSIONS, Document, DocumentChunk
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from ai.rag.chunking import Chunk
 from ai.rag.ingestion import ExtractedDocument
-from app.models.documents import EMBEDDING_DIMENSIONS, Document, DocumentChunk
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,7 +206,12 @@ class PostgresRAGRepository:
             DocumentChunk.embedding_model == embedding_model,
         ]
         if course_id is not None:
-            filters.append(DocumentChunk.course_id == course_id)
+            filters.append(
+                or_(
+                    DocumentChunk.owner_id == user_id,
+                    DocumentChunk.course_id == course_id,
+                )
+            )
         if document_ids is not None:
             if not document_ids:
                 filters.append(DocumentChunk.document_id.is_(None))

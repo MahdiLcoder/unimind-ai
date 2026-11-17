@@ -37,10 +37,17 @@ async def list_users(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    query: Annotated[str | None, Query(max_length=320)] = None,
 ) -> list[UserProfileResponse]:
+    statement = select(User)
+    search = query.strip() if query else ""
+    if search:
+        statement = statement.where(
+            User.email.ilike(f"%{search}%")
+            | User.clerk_user_id.ilike(f"%{search}%")
+        )
     result = await session.scalars(
-        select(User)
-        .order_by(User.created_at.desc(), User.clerk_user_id)
+        statement.order_by(User.created_at.desc(), User.clerk_user_id)
         .limit(limit)
         .offset(offset)
     )

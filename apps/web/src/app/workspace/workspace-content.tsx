@@ -2,7 +2,6 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -18,8 +17,10 @@ import {
   FileCheck,
   AlertCircle,
   Copy,
-  Check,
   Eraser,
+  History,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 
 import { apiFetch, apiRequest } from "@/lib/api";
@@ -51,6 +52,17 @@ const uploadResponseSchema = z.object({
   source_filename: z.string(),
   status: z.string(),
 });
+const courseSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+});
+const conversationSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
 
 const agentEventSchema = z.object({
   request_id: z.string().uuid(),
@@ -61,9 +73,22 @@ const agentEventSchema = z.object({
   occurred_at: z.string(),
   metadata: z.record(z.string(), z.unknown()),
 });
+const conversationHistorySchema = z.object({
+  conversation_id: z.string().uuid(),
+  messages: z.array(
+    z.object({
+      role: z.string(),
+      content: z.string(),
+      sources: z.array(z.record(z.string(), z.unknown())).default([]),
+    })
+  ),
+  events: z.array(agentEventSchema),
+});
 
 type DocumentInfo = z.infer<typeof documentSchema>;
 type AgentEvent = z.infer<typeof agentEventSchema>;
+type Course = z.infer<typeof courseSchema>;
+type Conversation = z.infer<typeof conversationSchema>;
 type Source = Record<string, unknown>;
 type Message = {
   role: "user" | "assistant";
@@ -127,10 +152,15 @@ function sourceLabel(source: Source): string {
 
 export default function WorkspaceContent() {
   const { getToken, isLoaded: authLoaded } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
+  const { isLoaded: userLoaded } = useUser();
   const conversationId = useRef<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -157,13 +187,39 @@ export default function WorkspaceContent() {
     return apiRequest("/api/v1/documents", z.array(documentSchema), { accessToken: token });
   }, [getToken]);
 
+  const fetchConversations = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No active session token was returned");
+    return apiRequest("/api/v1/agents/conversations", z.array(conversationSchema), {
+      accessToken: token,
+    });
+  }, [getToken]);
+
   useEffect(() => {
     if (!authLoaded || !userLoaded) return;
 
     let active = true;
-    void fetchDocuments()
-      .then((result) => {
-        if (active) setDocuments(result);
+    void Promise.all([
+      fetchDocuments(),
+      getToken().then((token) => {
+        if (!token) throw new Error("No active session token was returned");
+        return apiRequest("/api/v1/courses", z.array(courseSchema), { accessToken: token });
+      }),
+      fetchConversations(),
+    ])
+      .then(([documentList, courseList, conversationList]) => {
+        if (!active) return;
+        setDocuments(documentList);
+        setCourses(courseList);
+        setConversations(conversationList);
+        const requestedCourseId = typeof window === "undefined"
+          ? ""
+          : new URLSearchParams(window.location.search).get("course") ?? "";
+        setSelectedCourseId((current) =>
+          current || (courseList.some((course) => course.id === requestedCourseId)
+            ? requestedCourseId
+            : "")
+        );
       })
       .catch((cause: unknown) => {
         if (active) {
@@ -178,7 +234,7 @@ export default function WorkspaceContent() {
     return () => {
       active = false;
     };
-  }, [authLoaded, fetchDocuments, refresh, userLoaded]);
+  }, [authLoaded, fetchConversations, fetchDocuments, getToken, refresh, userLoaded]);
 
   async function uploadSelectedFile(file: File) {
     setUploading(true);
@@ -248,7 +304,11 @@ export default function WorkspaceContent() {
           accessToken: token,
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: searchText, top_k: 5 }),
+          body: JSON.stringify({
+            query: searchText,
+            top_k: 5,
+            course_id: selectedCourseId || null,
+          }),
         }
       );
       setSearchResults(result);
@@ -276,7 +336,10 @@ export default function WorkspaceContent() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No active session token was returned");
-      conversationId.current ??= crypto.randomUUID();
+      if (!conversationId.current) {
+        conversationId.current = crypto.randomUUID();
+        setActiveConversationId(conversationId.current);
+      }
       const response = await apiFetch("/api/v1/agents/stream", {
         accessToken: token,
         method: "POST",
@@ -284,6 +347,7 @@ export default function WorkspaceContent() {
         body: JSON.stringify({
           conversation_id: conversationId.current,
           message: trimmed,
+          course_id: selectedCourseId || null,
         }),
       });
       if (!response.ok) {
@@ -311,6 +375,7 @@ export default function WorkspaceContent() {
           ]);
         }
       });
+      setConversations(await fetchConversations());
     } catch (cause) {
       const err = cause instanceof Error ? cause.message : "The AI request failed";
       setError(err);
@@ -331,6 +396,77 @@ export default function WorkspaceContent() {
     );
     return result.success ? result.data : [];
   }
+
+  async function loadConversation(conversation: Conversation) {
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No active session token was returned");
+      const history = await apiRequest(
+        `/api/v1/agents/conversations/${conversation.id}/history`,
+        conversationHistorySchema,
+        { accessToken: token }
+      );
+      conversationId.current = history.conversation_id;
+      setActiveConversationId(history.conversation_id);
+      setMessages(
+        history.messages
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .map((message) => ({
+            role: message.role as Message["role"],
+            content: message.content,
+            sources: message.sources,
+          }))
+      );
+      setAgentEvents(history.events);
+      setLastPrompt(
+        [...history.messages].reverse().find((message) => message.role === "user")?.content ?? ""
+      );
+      toast.success(`Loaded ${conversation.title}`);
+    } catch (cause) {
+      const err = cause instanceof Error ? cause.message : "Could not load conversation";
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  async function deleteConversation(conversation: Conversation) {
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No active session token was returned");
+      const response = await apiFetch(`/api/v1/agents/conversations/${conversation.id}`, {
+        accessToken: token,
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error(`Could not delete conversation (${response.status})`);
+      setConversations((current) => current.filter((item) => item.id !== conversation.id));
+      if (conversationId.current === conversation.id) {
+        conversationId.current = null;
+        setActiveConversationId(null);
+        setMessages([]);
+        setAgentEvents([]);
+      }
+      toast.success("Conversation deleted");
+    } catch (cause) {
+      const err = cause instanceof Error ? cause.message : "Could not delete conversation";
+      setError(err);
+      toast.error(err);
+    }
+  }
+
+  function startNewChat() {
+    conversationId.current = crypto.randomUUID();
+    setActiveConversationId(conversationId.current);
+    setMessages([]);
+    setAgentEvents([]);
+    setLastPrompt("");
+    setError(null);
+    toast.info("Started a new chat");
+  }
+
+  const visibleDocuments = documents.filter((document) =>
+    !selectedCourseId || document.course_id === null || document.course_id === selectedCourseId
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -364,7 +500,49 @@ export default function WorkspaceContent() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+        <div className={`grid gap-6 ${historyOpen ? "lg:grid-cols-[15rem_minmax(0,1.4fr)_minmax(18rem,0.8fr)]" : "lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]"}`}>
+          {historyOpen && (
+            <aside aria-label="Conversation history">
+              <Card className="p-4 lg:sticky lg:top-20">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <History className="size-4" /> Conversations
+                  </CardTitle>
+                  <Button aria-label="New chat" size="xs" variant="ghost" onClick={startNewChat} type="button">
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+                <div className="mt-3 max-h-[34rem] space-y-1 overflow-y-auto">
+                  {conversations.map((conversation) => (
+                    <div className="flex items-center gap-1" key={conversation.id}>
+                      <button
+                        className={`min-w-0 flex-1 rounded-md px-2 py-2 text-left text-xs transition-colors hover:bg-muted ${activeConversationId === conversation.id ? "bg-muted" : ""}`}
+                        onClick={() => void loadConversation(conversation)}
+                        type="button"
+                      >
+                        <span className="block truncate font-medium">{conversation.title}</span>
+                        <span className="mt-1 block text-[10px] text-muted-foreground">
+                          {new Date(conversation.updated_at).toLocaleDateString()}
+                        </span>
+                      </button>
+                      <Button
+                        aria-label={`Delete ${conversation.title}`}
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => void deleteConversation(conversation)}
+                        type="button"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                  {conversations.length === 0 && (
+                    <p className="px-2 py-4 text-xs text-muted-foreground">No saved conversations.</p>
+                  )}
+                </div>
+              </Card>
+            </aside>
+          )}
           {/* Chat Assistant Section */}
           <Card className="flex min-h-[38rem] flex-col">
             <CardHeader className="border-b px-5 py-4">
@@ -379,6 +557,18 @@ export default function WorkspaceContent() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    aria-label={historyOpen ? "Hide conversation history" : "Show conversation history"}
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setHistoryOpen((open) => !open)}
+                    type="button"
+                  >
+                    <MessageSquare className="size-4" />
+                  </Button>
+                  <Button size="xs" variant="outline" onClick={startNewChat} type="button">
+                    <Plus className="size-3.5" /> New Chat
+                  </Button>
                   {messages.length > 0 && (
                     <Button
                       variant="ghost"
@@ -388,6 +578,7 @@ export default function WorkspaceContent() {
                         setMessages([]);
                         setAgentEvents([]);
                         conversationId.current = null;
+                        setActiveConversationId(null);
                         toast.info("Conversation cleared.");
                       }}
                       type="button"
@@ -403,6 +594,24 @@ export default function WorkspaceContent() {
                   )}
                 </div>
               </div>
+              {courses.length > 0 && (
+                <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  Filter by course
+                  <select
+                    aria-label="Filter by course"
+                    className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                    onChange={(event) => setSelectedCourseId(event.target.value)}
+                    value={selectedCourseId}
+                  >
+                    <option value="">All courses</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.code} · {course.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </CardHeader>
 
             <CardContent className="flex-1 space-y-4 overflow-y-auto p-5" aria-live="polite">
@@ -595,7 +804,7 @@ export default function WorkspaceContent() {
                     <span className="sr-only">Loading documents…</span>
                   </div>
                 )}
-                {!loadingDocuments && documents.length === 0 && (
+                {!loadingDocuments && visibleDocuments.length === 0 && (
                   <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-4 text-center">
                     <FileText className="mx-auto size-5 text-muted-foreground/60" />
                     <p className="mt-2 text-xs font-medium text-foreground">No documents uploaded yet</p>
@@ -604,7 +813,7 @@ export default function WorkspaceContent() {
                     </p>
                   </div>
                 )}
-                {documents.map((document) => (
+                {visibleDocuments.map((document) => (
                   <div
                     className="flex items-start justify-between gap-3 rounded-lg border bg-card/60 p-3 transition-colors hover:bg-muted/40"
                     key={document.id}

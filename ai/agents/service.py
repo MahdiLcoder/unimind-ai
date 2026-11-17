@@ -260,10 +260,10 @@ class PostgresAgentEventStore:
         user_id: str,
         conversation_id: UUID,
     ) -> list[AgentStreamEvent]:
+        from app.models.agent_events import AgentExecutionEvent
         from sqlalchemy import select
 
         from ai.agents.schemas import AgentName
-        from app.models.agent_events import AgentExecutionEvent
 
         async with self.session_factory() as session:
             rows = (
@@ -374,6 +374,7 @@ def make_agent_request(
     conversation_id: UUID,
     request_id: UUID,
     message: str,
+    course_id: str | None = None,
 ) -> AgentRunRequest:
     return AgentRunRequest(
         user_id=principal.user_id,
@@ -381,5 +382,9 @@ def make_agent_request(
         request_id=request_id,
         message=message,
         role=principal.role,
-        allowed_course_ids=principal.allowed_course_ids,
+        allowed_course_ids=(
+            frozenset({course_id})
+            if course_id is not None
+            else principal.allowed_course_ids
+        ),
     )

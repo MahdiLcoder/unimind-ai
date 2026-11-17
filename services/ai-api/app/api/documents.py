@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.agents import get_agent_principal
 from app.api.auth import get_current_user
+from app.api.courses import get_accessible_course_ids
 from app.api.dependencies import get_rag_service
 from app.core.database import get_db_session
 from app.models.documents import Document
@@ -134,10 +135,19 @@ async def delete_document(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
+    course_ids = await get_accessible_course_ids(user, session)
+    course_document_access = (
+        Document.course_id.in_(course_ids)
+        if user.role in {"professor", "administrator"} and course_ids
+        else False
+    )
     document = await session.scalar(
         select(Document).where(
             Document.id == document_id,
-            Document.owner_id == user.clerk_user_id,
+            or_(
+                Document.owner_id == user.clerk_user_id,
+                course_document_access,
+            ),
         )
     )
     if document is None:

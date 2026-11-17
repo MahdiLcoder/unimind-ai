@@ -37,11 +37,18 @@ class AgentRequestBody(BaseModel):
     conversation_id: UUID
     request_id: UUID = Field(default_factory=uuid4)
     message: str = Field(min_length=1, max_length=4096)
+    course_id: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ConversationMessageResponse(BaseModel):
+    role: str
+    content: str
+    sources: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ConversationHistoryResponse(BaseModel):
     conversation_id: UUID
-    messages: list[dict[str, str]]
+    messages: list[ConversationMessageResponse]
     events: list[AgentStreamEvent]
 
 
@@ -146,12 +153,18 @@ async def run_agent(
     principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AgentRunResponse:
+    if body.course_id is not None and body.course_id not in principal.allowed_course_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course was not found",
+        )
     run = await _start_persisted_run(session, principal, body)
     run_request = make_agent_request(
         principal,
         conversation_id=body.conversation_id,
         request_id=body.request_id,
         message=body.message,
+        course_id=body.course_id,
     )
     try:
         response = await service.invoke(run_request)
@@ -192,12 +205,18 @@ async def stream_agent(
     principal: Annotated[AgentPrincipal, Depends(get_agent_principal)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> StreamingResponse:
+    if body.course_id is not None and body.course_id not in principal.allowed_course_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course was not found",
+        )
     run = await _start_persisted_run(session, principal, body)
     run_request = make_agent_request(
         principal,
         conversation_id=body.conversation_id,
         request_id=body.request_id,
         message=body.message,
+        course_id=body.course_id,
     )
 
     async def stream_events() -> AsyncIterator[str]:
@@ -324,7 +343,11 @@ async def get_conversation_history(
         principal.user_id, conversation_id
     )
     messages = [
-        {"role": message.role, "content": message.content}
+        ConversationMessageResponse(
+            role=message.role,
+            content=message.content,
+            sources=message.sources,
+        )
         for message in stored_messages
     ]
     return ConversationHistoryResponse(

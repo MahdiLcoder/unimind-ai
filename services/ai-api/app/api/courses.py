@@ -121,6 +121,12 @@ class EnrollmentResponse(BaseModel):
     enrolled_at: datetime
 
 
+class CourseEnrollmentProgressResponse(EnrollmentResponse):
+    email: str | None
+    completed_tasks_count: int
+    average_quiz_score: float | None
+
+
 class CourseLearningOverview(BaseModel):
     course_id: str
     active_students: int
@@ -349,13 +355,13 @@ async def drop_course(
 
 @router.get(
     "/courses/{course_id}/enrollments",
-    response_model=list[EnrollmentResponse],
+    response_model=list[CourseEnrollmentProgressResponse],
 )
 async def list_course_enrollments(
     course_id: str,
     professor: Professor,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> list[EnrollmentResponse]:
+) -> list[CourseEnrollmentProgressResponse]:
     course = await session.get(Course, course_id)
     if course is None or (
         professor.role != UserRole.ADMINISTRATOR.value
@@ -365,12 +371,64 @@ async def list_course_enrollments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course was not found",
         )
-    enrollments = await session.scalars(
-        select(Enrollment)
+    completed_tasks_count = (
+        select(func.count(TaskProgress.task_id))
+        .join(AcademicTask, AcademicTask.id == TaskProgress.task_id)
+        .where(
+            TaskProgress.student_id == Enrollment.student_id,
+            TaskProgress.status == "completed",
+            AcademicTask.course_id == course_id,
+            AcademicTask.owner_id.is_(None),
+        )
+        .correlate(Enrollment)
+        .scalar_subquery()
+    )
+    average_quiz_score = (
+        select(
+            func.avg(
+                QuizAttempt.score
+                * 100.0
+                / func.nullif(
+                    select(func.sum(QuizQuestion.points))
+                    .where(QuizQuestion.quiz_id == QuizAttempt.quiz_id)
+                    .scalar_subquery(),
+                    0,
+                )
+            )
+        )
+        .join(Quiz, Quiz.id == QuizAttempt.quiz_id)
+        .where(
+            QuizAttempt.user_id == Enrollment.student_id,
+            Quiz.course_id == course_id,
+        )
+        .correlate(Enrollment)
+        .scalar_subquery()
+    )
+    rows = await session.execute(
+        select(
+            Enrollment,
+            User.email,
+            completed_tasks_count.label("completed_tasks_count"),
+            average_quiz_score.label("average_quiz_score"),
+        )
+        .join(User, User.clerk_user_id == Enrollment.student_id)
         .where(Enrollment.course_id == course_id, Enrollment.status == "active")
         .order_by(Enrollment.enrolled_at, Enrollment.student_id)
     )
-    return [EnrollmentResponse.model_validate(item) for item in enrollments]
+    return [
+        CourseEnrollmentProgressResponse(
+            course_id=enrollment.course_id,
+            student_id=enrollment.student_id,
+            email=email,
+            status=enrollment.status,
+            enrolled_at=enrollment.enrolled_at,
+            completed_tasks_count=completed_count or 0,
+            average_quiz_score=(
+                float(average_score) if average_score is not None else None
+            ),
+        )
+        for enrollment, email, completed_count, average_score in rows
+    ]
 
 
 @router.get(

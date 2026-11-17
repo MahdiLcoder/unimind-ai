@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -15,6 +14,9 @@ import {
   Play,
   Award,
   ListTodo,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
@@ -108,6 +110,11 @@ const courseSchema = z.object({
   code: z.string(),
   name: z.string(),
 });
+const flashcardSchema = z.object({
+  front: z.string(),
+  back: z.string(),
+  hint: z.string(),
+});
 
 type Task = z.infer<typeof taskSchema>;
 type StudyPlan = z.infer<typeof studyPlanSchema>;
@@ -141,6 +148,12 @@ export default function LearningContent() {
   const [questionCount, setQuestionCount] = useState(5);
   const [quizCourseId, setQuizCourseId] = useState("");
   const [quizPublished, setQuizPublished] = useState(false);
+  const [flashcardTopic, setFlashcardTopic] = useState("");
+  const [flashcardCount, setFlashcardCount] = useState(10);
+  const [flashcards, setFlashcards] = useState<z.infer<typeof flashcardSchema>[]>([]);
+  const [flashcardIndex, setFlashcardIndex] = useState(0);
+  const [flashcardFlipped, setFlashcardFlipped] = useState(false);
+  const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -316,6 +329,41 @@ export default function LearningContent() {
     }
   }
 
+  async function generateFlashcards(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setGeneratingFlashcards(true);
+    try {
+      const accessToken = await token();
+      const generated = await apiRequest(
+        "/api/v1/flashcards/generate",
+        z.array(flashcardSchema),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: flashcardTopic,
+            card_count: flashcardCount,
+            course_id: quizCourseId || null,
+          }),
+          accessToken,
+        }
+      );
+      setFlashcards(generated);
+      setFlashcardIndex(0);
+      setFlashcardFlipped(false);
+      setFlashcardTopic("");
+      setNotice(`${generated.length} flashcards generated.`);
+      toast.success(`${generated.length} flashcards generated.`);
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    } finally {
+      setGeneratingFlashcards(false);
+    }
+  }
+
   async function submitQuiz(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeQuiz) return;
@@ -387,6 +435,9 @@ export default function LearningContent() {
                 <BrainCircuit className="size-3.5" />
                 Learning Studio & Quizzes
                 {quizzes.length > 0 && <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{quizzes.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="flashcards" className="gap-1.5">
+                <Sparkles className="size-3.5" /> Flashcards
               </TabsTrigger>
             </TabsList>
 
@@ -866,6 +917,149 @@ export default function LearningContent() {
                     </form>
                   </Card>
                 </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="flashcards" className="mt-6">
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                <section aria-label="Flashcard review" className="min-w-0">
+                  {flashcards.length > 0 ? (
+                    <div className="mx-auto max-w-2xl">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Card {flashcardIndex + 1} of {flashcards.length}
+                        </p>
+                        <Button
+                          aria-label="Restart flashcard review"
+                          onClick={() => {
+                            setFlashcardIndex(0);
+                            setFlashcardFlipped(false);
+                          }}
+                          size="xs"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <RotateCcw className="size-3.5" /> Restart
+                        </Button>
+                      </div>
+                      <button
+                        aria-label={flashcardFlipped ? "Show flashcard front" : "Reveal flashcard answer"}
+                        className="relative h-72 w-full rounded-lg border bg-card p-6 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => setFlashcardFlipped((flipped) => !flipped)}
+                        style={{ perspective: "1000px" }}
+                        type="button"
+                      >
+                        <span
+                          className="absolute inset-0 flex flex-col justify-center rounded-lg p-6 transition-transform duration-500"
+                          style={{
+                            transform: flashcardFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                            transformStyle: "preserve-3d",
+                            backfaceVisibility: "hidden",
+                          }}
+                        >
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prompt</span>
+                          <span className="mt-3 text-xl font-semibold leading-relaxed">{flashcards[flashcardIndex].front}</span>
+                          <span className="mt-6 text-xs text-muted-foreground">Select to reveal the answer</span>
+                        </span>
+                        <span
+                          className="absolute inset-0 flex flex-col justify-center rounded-lg bg-muted/50 p-6 transition-transform duration-500"
+                          style={{
+                            transform: flashcardFlipped ? "rotateY(0deg)" : "rotateY(-180deg)",
+                            transformStyle: "preserve-3d",
+                            backfaceVisibility: "hidden",
+                          }}
+                        >
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">Answer</span>
+                          <span className="mt-3 text-lg font-medium leading-relaxed">{flashcards[flashcardIndex].back}</span>
+                          {flashcards[flashcardIndex].hint && (
+                            <span className="mt-5 border-t pt-3 text-sm text-muted-foreground">
+                              Hint: {flashcards[flashcardIndex].hint}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                      <div className="mt-4 flex justify-between">
+                        <Button
+                          disabled={flashcardIndex === 0}
+                          onClick={() => {
+                            setFlashcardIndex((index) => index - 1);
+                            setFlashcardFlipped(false);
+                          }}
+                          type="button"
+                          variant="outline"
+                        ><ChevronLeft className="size-4" /> Previous</Button>
+                        <Button
+                          disabled={flashcardIndex === flashcards.length - 1}
+                          onClick={() => {
+                            setFlashcardIndex((index) => index + 1);
+                            setFlashcardFlipped(false);
+                          }}
+                          type="button"
+                        >Next <ChevronRight className="size-4" /></Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={Sparkles}
+                      title="No flashcards to review"
+                      description="Generate a set from a topic or course materials."
+                    />
+                  )}
+                </section>
+
+                <Card className="p-5">
+                  <CardTitle className="text-base font-semibold">Generate flashcards</CardTitle>
+                  <CardDescription className="mt-1 text-xs">
+                    Build a review set from your topic and accessible course knowledge.
+                  </CardDescription>
+                  <form className="mt-4 space-y-3" onSubmit={generateFlashcards}>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium" htmlFor="flashcard-topic">Topic</label>
+                      <Input
+                        id="flashcard-topic"
+                        maxLength={1000}
+                        minLength={3}
+                        onChange={(event) => setFlashcardTopic(event.target.value)}
+                        placeholder="e.g. Graph traversal algorithms"
+                        required
+                        value={flashcardTopic}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium" htmlFor="flashcard-count">Card count</label>
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        id="flashcard-count"
+                        onChange={(event) => setFlashcardCount(Number(event.target.value))}
+                        value={flashcardCount}
+                      >
+                        {[5, 10, 15, 20, 25, 30].map((count) => (
+                          <option key={count} value={count}>{count} cards</option>
+                        ))}
+                      </select>
+                    </div>
+                    {courses.length > 0 && (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium" htmlFor="flashcard-course">Course context</label>
+                        <select
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          id="flashcard-course"
+                          onChange={(event) => setQuizCourseId(event.target.value)}
+                          value={quizCourseId}
+                        >
+                          <option value="">All courses</option>
+                          {courses.map((course) => (
+                            <option key={course.id} value={course.id}>{course.code} · {course.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <Button className="w-full gap-2" disabled={generatingFlashcards} type="submit">
+                      <Sparkles className="size-3.5" />
+                      {generatingFlashcards ? "Generating…" : "Generate flashcards"}
+                    </Button>
+                  </form>
+                </Card>
               </div>
             </TabsContent>
           </Tabs>

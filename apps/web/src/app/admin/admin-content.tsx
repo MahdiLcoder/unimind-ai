@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -12,11 +12,15 @@ import {
   History,
   Trash2,
   Lock,
+  Cpu,
+  Search,
+  RefreshCw,
 } from "lucide-react";
 import { apiFetch, apiRequest } from "@/lib/api";
 import { SiteHeader } from "@/components/site-header";
 import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -50,11 +54,40 @@ const auditSchema = z.object({
   details: z.record(z.string(), z.unknown()),
   created_at: z.string(),
 });
+const agentRunsSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().uuid(),
+      request_id: z.string().uuid(),
+      conversation_id: z.string().uuid(),
+      user_id: z.string(),
+      status: z.enum(["running", "completed", "failed"]),
+      error_message: z.string().nullable(),
+      created_at: z.string(),
+      finished_at: z.string().nullable(),
+      steps: z.array(
+        z.object({
+          id: z.string().uuid(),
+          event_type: z.string(),
+          agent_name: z.string().nullable(),
+          message: z.string(),
+          metadata_json: z.record(z.string(), z.unknown()),
+          created_at: z.string(),
+        })
+      ),
+    })
+  ),
+  total_count: z.number(),
+  running_count: z.number(),
+  completed_count: z.number(),
+  failed_count: z.number(),
+});
 type UserProfile = z.infer<typeof userSchema>;
 type UserRole = UserProfile["role"];
 type PlatformFeature = z.infer<typeof featuresSchema>["features"][number];
 type Workspace = z.infer<typeof workspaceSchema>;
 type AuditEntry = z.infer<typeof auditSchema>;
+type AgentRuns = z.infer<typeof agentRunsSchema>;
 
 const roles: UserRole[] = ["student", "professor", "administrator"];
 const roleLabel: Record<UserRole, string> = {
@@ -73,6 +106,10 @@ export default function AdminContent() {
   const [features, setFeatures] = useState<PlatformFeature[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
+  const [agentRuns, setAgentRuns] = useState<AgentRuns | null>(null);
+  const [userSearch, setUserSearch] = useState("");
+  const [runStatus, setRunStatus] = useState("");
+  const [runOffset, setRunOffset] = useState(0);
   const [self, setSelf] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,17 +123,48 @@ export default function AdminContent() {
     setSelf(profile.clerk_user_id);
     setAuthorized(profile.role === "administrator");
     if (profile.role !== "administrator") return;
-    const [userList, featureList, workspaceList, logs] = await Promise.all([
+    const [userList, featureList, workspaceList, logs, runs] = await Promise.all([
       apiRequest("/api/v1/users?limit=100", z.array(userSchema), { accessToken }),
       apiRequest("/api/v1/admin/features", featuresSchema, { accessToken }),
       apiRequest("/api/v1/admin/workspaces?limit=100", z.array(workspaceSchema), { accessToken }),
       apiRequest("/api/v1/admin/audit-logs?limit=100", z.array(auditSchema), { accessToken }),
+      apiRequest("/api/v1/admin/agent-runs?limit=25", agentRunsSchema, { accessToken }),
     ]);
     setUsers(userList);
     setFeatures(featureList.features);
     setWorkspaces(workspaceList);
     setAuditLogs(logs);
+    setAgentRuns(runs);
   }, [getToken]);
+
+  const refreshAgentRuns = useCallback(async () => {
+    const accessToken = await getToken();
+    if (!accessToken) throw new Error("No active session token was returned");
+    const params = new URLSearchParams({ limit: "25", offset: String(runOffset) });
+    if (runStatus) params.set("status", runStatus);
+    const result = await apiRequest(
+      `/api/v1/admin/agent-runs?${params}`,
+      agentRunsSchema,
+      { accessToken }
+    );
+    setAgentRuns(result);
+  }, [getToken, runOffset, runStatus]);
+
+  async function searchUsers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      const accessToken = await getToken();
+      if (!accessToken) throw new Error("No active session token was returned");
+      const params = new URLSearchParams({ limit: "100" });
+      if (userSearch.trim()) params.set("query", userSearch.trim());
+      setUsers(await apiRequest(`/api/v1/users?${params}`, z.array(userSchema), { accessToken }));
+    } catch (cause) {
+      const err = message(cause);
+      setError(err);
+      toast.error(err);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -112,6 +180,20 @@ export default function AdminContent() {
       active = false;
     };
   }, [load]);
+
+  useEffect(() => {
+    if (authorized !== true) return;
+    const initialTimeoutId = window.setTimeout(() => {
+      void refreshAgentRuns().catch((cause: unknown) => setError(message(cause)));
+    }, 0);
+    const intervalId = window.setInterval(() => {
+      void refreshAgentRuns().catch((cause: unknown) => setError(message(cause)));
+    }, 30_000);
+    return () => {
+      window.clearTimeout(initialTimeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [authorized, refreshAgentRuns]);
 
   async function changeRole(user: UserProfile, role: UserRole) {
     setError(null);
@@ -281,6 +363,13 @@ export default function AdminContent() {
                 <History className="size-3.5 text-primary" />
                 <span>Audit Logs ({auditLogs.length})</span>
               </a>
+              <a
+                href="#agent-runs-section"
+                className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <Cpu className="size-3.5 text-primary" />
+                <span>AI Executions</span>
+              </a>
             </nav>
 
             {/* Users Section */}
@@ -297,6 +386,20 @@ export default function AdminContent() {
                   </div>
                   <Badge variant="secondary">{users.length} registered</Badge>
                 </div>
+
+                <form className="mb-4 flex flex-wrap gap-2" onSubmit={searchUsers}>
+                  <label className="sr-only" htmlFor="admin-user-search">Search users by email or ID</label>
+                  <Input
+                    className="min-w-0 flex-1"
+                    id="admin-user-search"
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="Search email or user ID"
+                    value={userSearch}
+                  />
+                  <Button className="gap-2" type="submit" variant="outline">
+                    <Search className="size-4" /> Search
+                  </Button>
+                </form>
 
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full min-w-[36rem] text-left text-sm">
@@ -356,6 +459,148 @@ export default function AdminContent() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </Card>
+            </section>
+
+            <section id="agent-runs-section" aria-labelledby="agent-runs-heading" className="border-t pt-8">
+              <Card className="p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <CardTitle id="agent-runs-heading" className="flex items-center gap-2 text-xl font-semibold">
+                      <Cpu className="size-5" /> AI Executions &amp; Observability
+                    </CardTitle>
+                    <CardDescription className="mt-1 text-xs">
+                      Persisted multi-agent runs and execution steps. Refreshes every 30 seconds.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    aria-label="Refresh agent runs"
+                    onClick={() => void refreshAgentRuns().catch((cause: unknown) => setError(message(cause)))}
+                    size="xs"
+                    type="button"
+                    variant="outline"
+                  >
+                    <RefreshCw className="size-3.5" /> Refresh
+                  </Button>
+                </div>
+
+                <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { label: "Total runs", value: agentRuns ? agentRuns.running_count + agentRuns.completed_count + agentRuns.failed_count : "—" },
+                    {
+                      label: "Success rate",
+                      value: agentRuns && agentRuns.completed_count + agentRuns.failed_count > 0
+                        ? `${Math.round(agentRuns.completed_count / (agentRuns.completed_count + agentRuns.failed_count) * 100)}%`
+                        : "—",
+                    },
+                    { label: "Failed runs", value: agentRuns?.failed_count ?? "—" },
+                  ].map((metric) => (
+                    <div className="rounded-md border p-3" key={metric.label}>
+                      <dt className="text-xs text-muted-foreground">{metric.label}</dt>
+                      <dd className="mt-1 text-xl font-semibold">{metric.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Status
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-foreground"
+                      onChange={(event) => {
+                        setRunOffset(0);
+                        setRunStatus(event.target.value);
+                      }}
+                      value={runStatus}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="running">Running</option>
+                      <option value="completed">Completed</option>
+                      <option value="failed">Failed</option>
+                    </select>
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    {agentRuns?.total_count ?? 0} matching runs
+                  </span>
+                </div>
+
+                <div className="mt-3 overflow-x-auto rounded-lg border">
+                  <table className="w-full min-w-[54rem] text-left text-xs">
+                    <thead className="border-b bg-muted/50">
+                      <tr>
+                        <th className="p-3 font-semibold">Started</th>
+                        <th className="p-3 font-semibold">User ID</th>
+                        <th className="p-3 font-semibold">Status</th>
+                        <th className="p-3 font-semibold">Execution time</th>
+                        <th className="p-3 font-semibold">Error / execution steps</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {(agentRuns?.items ?? []).map((run) => {
+                        const duration = run.finished_at
+                          ? Math.max(0, new Date(run.finished_at).getTime() - new Date(run.created_at).getTime())
+                          : null;
+                        return (
+                          <tr key={run.id} className="align-top hover:bg-muted/20">
+                            <td className="whitespace-nowrap p-3 text-muted-foreground">
+                              {new Date(run.created_at).toLocaleString()}
+                            </td>
+                            <td className="max-w-48 break-all p-3 font-mono">{run.user_id}</td>
+                            <td className="p-3">
+                              <Badge variant={run.status === "failed" ? "destructive" : "outline"} className="capitalize">
+                                {run.status}
+                              </Badge>
+                            </td>
+                            <td className="whitespace-nowrap p-3">
+                              {duration === null ? "In progress" : `${(duration / 1000).toFixed(2)} s`}
+                            </td>
+                            <td className="max-w-[30rem] p-3">
+                              {run.error_message ? (
+                                <p className="text-destructive">{run.error_message}</p>
+                              ) : run.steps.length === 0 ? (
+                                <span className="text-muted-foreground">No execution steps recorded</span>
+                              ) : null}
+                              {run.steps.length > 0 && (
+                                <details className="mt-1">
+                                  <summary className="cursor-pointer text-muted-foreground">
+                                    {run.steps.length} execution steps
+                                  </summary>
+                                  <ol className="mt-2 space-y-1 border-l pl-3">
+                                    {run.steps.map((step) => (
+                                      <li key={step.id}>
+                                        <span className="font-medium">{step.agent_name ?? step.event_type}</span>
+                                        {" · "}{step.message}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                </details>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {agentRuns?.items.length === 0 && (
+                        <tr><td className="p-6 text-center text-muted-foreground" colSpan={5}>No agent runs match this filter.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button
+                    disabled={runOffset === 0}
+                    onClick={() => setRunOffset((offset) => Math.max(0, offset - 25))}
+                    size="xs"
+                    type="button"
+                    variant="outline"
+                  >Previous</Button>
+                  <Button
+                    disabled={!agentRuns || runOffset + 25 >= agentRuns.total_count}
+                    onClick={() => setRunOffset((offset) => offset + 25)}
+                    size="xs"
+                    type="button"
+                    variant="outline"
+                  >Next</Button>
                 </div>
               </Card>
             </section>
