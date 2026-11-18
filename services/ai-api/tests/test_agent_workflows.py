@@ -210,3 +210,35 @@ async def test_stream_and_checkpoint_resume_preserve_conversation_history() -> N
     ]
     assert len(stored_events) == 6
     assert all(event.conversation_id == conversation_id for event in stored_events)
+
+
+class _RaisingAgent:
+    def __init__(self, name: AgentName, error: Exception) -> None:
+        self.name = name
+        self.error = error
+
+    async def execute(self, state: dict[str, object]) -> dict[str, object]:
+        raise self.error
+
+
+@pytest.mark.asyncio
+async def test_agent_failure_reports_error_type_instead_of_opaque_message() -> None:
+    graphs = create_agent_graphs(
+        _RecordingAgent(AgentName.KNOWLEDGE),
+        _RaisingAgent(AgentName.LEARNING, asyncio.TimeoutError()),
+        checkpointer=InMemorySaver(),
+    )
+
+    state = await graphs.supervisor.ainvoke(
+        AgentService._input(_request("Create a quiz about photosynthesis.")),
+        config={"configurable": {"thread_id": "agent-failure"}},
+    )
+
+    assert "TimeoutError" in state["final_response"]
+    assert state["errors"]
+    assert all(error.get("error_type") == "TimeoutError" for error in state["errors"])
+    failed_events = [
+        event for event in state["events"] if event["event_type"] == "agent_failed"
+    ]
+    assert failed_events
+    assert failed_events[0]["metadata"]["error_type"] == "TimeoutError"

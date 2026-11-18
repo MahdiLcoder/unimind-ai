@@ -134,30 +134,40 @@ def create_agent_graphs(
             AGENT_EXECUTIONS.labels(agent_name.value, "failure").inc()
             duration = perf_counter() - started
             AGENT_EXECUTION_DURATION.labels(agent_name.value).observe(duration)
+            error_type = type(exc).__name__
             logger.exception(
                 "Agent execution failed",
                 extra={
                     "agent": agent_name.value,
                     "request_id": state["request_id"],
-                    "error_type": type(exc).__name__,
+                    "error_type": error_type,
                     "duration_seconds": round(duration, 6),
                     "outcome": "failure",
                 },
             )
             error_code = "agent_execution_failed"
+            # Surface the exception class so callers can tell a timeout from a
+            # model/validation error instead of seeing an opaque failure text.
             return {
                 "agent_outputs": {
                     agent_name.value: {
                         "content": (
                             "This agent could not complete its task. "
-                            "Please try again."
+                            f"Please try again. (cause: {error_type})"
                         ),
                         "evidence_sufficient": False,
                         "error_code": error_code,
+                        "error_type": error_type,
                         "retryable": True,
                     }
                 },
-                "errors": [{"agent": agent_name.value, "code": error_code}],
+                "errors": [
+                    {
+                        "agent": agent_name.value,
+                        "code": error_code,
+                        "error_type": error_type,
+                    }
+                ],
                 "events": [
                     _event(
                         state,
@@ -166,6 +176,7 @@ def create_agent_graphs(
                         agent_name,
                         {
                             "error_code": error_code,
+                            "error_type": error_type,
                             "latency_ms": round((perf_counter() - started) * 1000, 2),
                         },
                     )

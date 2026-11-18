@@ -9,6 +9,12 @@ from ai.agents.schemas import AgentName
     ("message", "expected"),
     [
         ("Summarize my lecture notes", (AgentName.KNOWLEDGE,)),
+        (
+            "Explain the central limit theorem and its significance in "
+            "statistical inference.",
+            (AgentName.KNOWLEDGE,),
+        ),
+        ("Explain Bayesian inference in simple terms with an example.", (AgentName.LEARNING,)),
         ("Create flashcards about calculus", (AgentName.LEARNING,)),
         ("Find academic papers about retrieval augmented generation", (AgentName.RESEARCH,)),
         ("Debug this Python function", (AgentName.CODING,)),
