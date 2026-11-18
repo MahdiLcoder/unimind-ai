@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from uuid import uuid4
 
 import pytest
@@ -46,6 +48,65 @@ class _FakeEmbedder(SentenceTransformerEmbedder):
 
     def _load_model(self) -> _Encoder:
         return self.encoder
+
+
+def test_cached_model_loads_without_network(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    cached_config = tmp_path / "config.json"
+    cached_config.write_text("{}", encoding="utf-8")
+
+    fake_hub = types.ModuleType("huggingface_hub")
+    fake_hub.try_to_load_from_cache = lambda **_: str(cached_config)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
+
+    loads: list[dict[str, object]] = []
+
+    class _FakeSentenceTransformer:
+        def __init__(self, _model_id: str, **kwargs: object) -> None:
+            loads.append(kwargs)
+
+    fake_st = types.ModuleType("sentence_transformers")
+    fake_st.SentenceTransformer = _FakeSentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_st)
+
+    embedder = SentenceTransformerEmbedder(
+        ModelConfig(
+            provider=ModelProvider.HUGGINGFACE,
+            model_id="test/embedding",
+            dimensions=3,
+        ),
+        runtime=SingleModelRuntime(),
+    )
+    embedder._load_model()
+
+    assert loads == [{"device": "cpu", "local_files_only": True}]
+
+
+def test_uncached_model_loads_online(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_hub = types.ModuleType("huggingface_hub")
+    fake_hub.try_to_load_from_cache = lambda **_: None
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
+
+    loads: list[dict[str, object]] = []
+
+    class _FakeSentenceTransformer:
+        def __init__(self, _model_id: str, **kwargs: object) -> None:
+            loads.append(kwargs)
+
+    fake_st = types.ModuleType("sentence_transformers")
+    fake_st.SentenceTransformer = _FakeSentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_st)
+
+    embedder = SentenceTransformerEmbedder(
+        ModelConfig(
+            provider=ModelProvider.HUGGINGFACE,
+            model_id="test/embedding",
+            dimensions=3,
+        ),
+        runtime=SingleModelRuntime(),
+    )
+    embedder._load_model()
+
+    assert loads == [{"device": "cpu", "local_files_only": False}]
 
 
 def test_embeddings_are_batched_cached_and_dimension_checked() -> None:

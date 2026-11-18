@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { apiFetch, apiRequest } from "@/lib/api";
+import { validateUploadFile } from "@/lib/upload";
 import { SiteHeader } from "@/components/site-header";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,13 @@ export default function WorkspaceContent() {
   }, [authLoaded, fetchConversations, fetchDocuments, getToken, refresh, userLoaded]);
 
   async function uploadSelectedFile(file: File) {
+    const validationError = validateUploadFile(file);
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -248,6 +256,7 @@ export default function WorkspaceContent() {
         accessToken: token,
         method: "POST",
         body: data,
+        timeoutMs: 180_000,
       });
       setLoadingDocuments(true);
       setRefresh((count) => count + 1);

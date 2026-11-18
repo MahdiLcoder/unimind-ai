@@ -47,6 +47,28 @@ describe("Frontend API client (apiFetch and apiRequest)", () => {
     expect(headers.get("X-Custom-Client")).toBe("unimind-test");
   });
 
+  it("attaches an abort signal when timeoutMs is provided", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    await apiFetch("/api/v1/documents", { timeoutMs: 60_000 });
+
+    const signal = mockFetch.mock.calls[0][1].signal as AbortSignal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+  });
+
+  it("reports a friendly message when a request times out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new DOMException("Timed out", "TimeoutError")),
+    );
+
+    await expect(
+      apiFetch("/api/v1/documents", { timeoutMs: 1 }),
+    ).rejects.toThrow("The server took too long to respond");
+  });
+
   it("apiRequest parses valid payload using the provided Zod schema", async () => {
     const payload = { id: "123", name: "CS101", credits: 4 };
     const schema = z.object({

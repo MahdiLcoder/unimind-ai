@@ -6,6 +6,7 @@ import math
 import time
 from collections import OrderedDict
 from collections.abc import Sequence
+from pathlib import Path
 from threading import Lock
 from typing import Protocol, cast
 
@@ -160,7 +161,34 @@ class SentenceTransformerEmbedder:
             raise EmbeddingError(
                 "Install the 'inference' dependency group to load Hugging Face models"
             ) from exc
+
+        # A fully cached model does not need any network access. Without this,
+        # sentence-transformers issues HEAD requests to huggingface.co on every
+        # load; when that host is unreachable the retries can stall an upload
+        # for many minutes while the shared model runtime lock is held.
+        local_files_only = _model_is_cached(self.model_id)
         return cast(
             _SentenceTransformerModel,
-            SentenceTransformer(self.model_id, device=self.config.device),
+            SentenceTransformer(
+                self.model_id,
+                device=self.config.device,
+                local_files_only=local_files_only,
+            ),
         )
+
+
+def _model_is_cached(model_id: str) -> bool:
+    """Return True when the model files are already in the local HF cache."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except ImportError:
+        return False
+    try:
+        cached = try_to_load_from_cache(repo_id=model_id, filename="config.json")
+    except Exception:
+        return False
+    if cached is None:
+        return False
+    # huggingface_hub returns None when the file is missing, a sentinel string
+    # for a cached LFS pointer and a real path for a complete cache entry.
+    return Path(cached).is_file()
