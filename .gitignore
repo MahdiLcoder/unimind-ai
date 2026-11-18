@@ -1,6 +1,8 @@
 # Environment variables and secrets
 .env
 .env.*
+prod-secrets.env
+secrets.env
 !.env.example
 **/.env
 **/.env.*

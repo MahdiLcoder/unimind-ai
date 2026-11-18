@@ -101,7 +101,7 @@ jobs:
       contents: read
       packages: write
     env:
-      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.unimind.example.com' }}
       INSTALL_HF_INFERENCE: ${{ vars.INSTALL_HF_INFERENCE || 'false' }}
     steps:
       - name: Check out source
