@@ -146,8 +146,6 @@ def create_agent_graphs(
                 },
             )
             error_code = "agent_execution_failed"
-            # Surface the exception class so callers can tell a timeout from a
-            # model/validation error instead of seeing an opaque failure text.
             return {
                 "agent_outputs": {
                     agent_name.value: {
@@ -187,7 +185,6 @@ def create_agent_graphs(
         outputs = state.get("agent_outputs", {})
         current_agents = state.get("agents_to_run", [])
 
-        # Check if an agent flagged a sensitive action requiring human approval
         for agent_name in current_agents:
             output = outputs.get(agent_name.value, {})
             if output.get("requires_human_approval"):

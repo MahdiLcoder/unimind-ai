@@ -333,7 +333,6 @@ export default function AdminContent() {
 
         {authorized && (
           <div className="mt-8 space-y-10">
-            {/* Quick jump navigation */}
             <nav aria-label="Admin Sections" className="flex flex-wrap gap-2 border-b pb-4">
               <a
                 href="#users-section"
@@ -372,7 +371,6 @@ export default function AdminContent() {
               </a>
             </nav>
 
-            {/* Users Section */}
             <section id="users-section" aria-labelledby="users-heading">
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -605,7 +603,6 @@ export default function AdminContent() {
               </Card>
             </section>
 
-            {/* Platform Features Section */}
             <section id="features-section" aria-labelledby="features-heading" className="border-t pt-8">
               <Card className="p-6">
                 <CardTitle id="features-heading" className="text-xl font-semibold">
@@ -644,7 +641,6 @@ export default function AdminContent() {
               </Card>
             </section>
 
-            {/* Workspaces Section */}
             <section id="workspaces-section" aria-labelledby="workspaces-heading" className="border-t pt-8">
               <Card className="p-6">
                 <CardTitle id="workspaces-heading" className="text-xl font-semibold">
@@ -687,7 +683,6 @@ export default function AdminContent() {
               </Card>
             </section>
 
-            {/* Audit Logs Section */}
             <section id="audit-section" aria-labelledby="audit-heading" className="border-t pt-8">
               <Card className="p-6">
                 <CardTitle id="audit-heading" className="text-xl font-semibold">

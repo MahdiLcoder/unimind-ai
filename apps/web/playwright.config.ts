@@ -1,8 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Use the system Google Chrome by default, or an explicitly configured channel.
-// To use Playwright's bundled Chromium instead, set PLAYWRIGHT_CHANNEL=none (requires
-// `pnpm exec playwright install chromium`, which requires external network access).
 const envChannel = process.env.PLAYWRIGHT_CHANNEL;
 const channel =
   envChannel === "none"

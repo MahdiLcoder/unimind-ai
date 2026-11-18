@@ -6,11 +6,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
 from app.models import (
-    academic,  # noqa: F401
-    conversations,  # noqa: F401
-    documents,  # noqa: F401
-    learning_memory,  # noqa: F401
-    users,  # noqa: F401
+    academic,
+    conversations,
+    documents,
+    learning_memory,
+    users,
 )
 from app.models.base import Base
 

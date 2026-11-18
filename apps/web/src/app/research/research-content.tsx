@@ -277,7 +277,6 @@ export default function ResearchContent() {
           </div>
         )}
 
-        {/* Search Bar */}
         <form className="mt-8 flex flex-col gap-3 sm:flex-row" onSubmit={search}>
           <label className="sr-only" htmlFor="paper-query">
             Search academic papers
@@ -340,7 +339,6 @@ export default function ResearchContent() {
           </div>
         )}
 
-        {/* Research Papers List */}
         {papers.length > 0 && (
           <section className="mt-10">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
@@ -512,7 +510,6 @@ export default function ResearchContent() {
           </section>
         )}
 
-        {/* Generated Review */}
         {review && (
           <Card className="mt-8 p-6" aria-live="polite">
             <CardHeader className="p-0 pb-4">
@@ -532,7 +529,6 @@ export default function ResearchContent() {
           </Card>
         )}
 
-        {/* Bibliography Section */}
         {papers.length > 0 && (
           <Card className="mt-8 p-6">
             <div className="flex items-center justify-between mb-3">

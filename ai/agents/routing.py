@@ -4,10 +4,6 @@ import re
 
 from ai.agents.schemas import AgentName, Intent, RoutingDecision
 
-# "explain" on its own is a factual request and belongs to the knowledge
-# agent. Learning intent needs an explicit activity phrasing, otherwise plain
-# "explain X" questions get routed to the slow structured-output learning
-# agent (and can time out) instead of the retrieval-backed knowledge agent.
 _LEARNING_TERMS = re.compile(
     r"\b(quiz|quizzes|flashcards?|lesson|teach me|practice|mock exam|"
     r"test me|evaluate my answer|knowledge gaps?|memorise|memorize|"

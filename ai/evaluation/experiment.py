@@ -163,8 +163,6 @@ async def run_paired_experiment(
         raise ValueError("top_k must be positive")
     output: list[PairedResult] = []
     for index, question in enumerate(questions):
-        # Serial execution avoids exhausting the CPU-only inference host and
-        # alternating order reduces systematic warm-cache/order advantage.
         if index % 2:
             proposed_result = await proposed(question)
             baseline_result = await baseline(question)

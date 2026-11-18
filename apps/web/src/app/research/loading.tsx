@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 export default function ResearchLoading() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header skeleton */}
       <div className="border-b bg-background">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
@@ -22,13 +21,11 @@ export default function ResearchLoading() {
           <Skeleton className="mt-2 h-4 w-96" />
         </div>
 
-        {/* Search bar skeleton */}
         <div className="mt-8 flex gap-3">
           <Skeleton className="h-11 flex-1 rounded-md" />
           <Skeleton className="h-11 w-36 rounded-md" />
         </div>
 
-        {/* Paper cards skeleton */}
         <div className="mt-8 space-y-4">
           <div className="flex justify-between items-center">
             <Skeleton className="h-6 w-36" />

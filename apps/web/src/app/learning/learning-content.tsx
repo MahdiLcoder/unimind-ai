@@ -926,10 +926,8 @@ export default function LearningContent() {
               )}
             </TabsContent>
 
-            {/* Tasks Tab */}
             <TabsContent value="planner" className="mt-6">
               <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-                {/* Task List */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-foreground">Active Tasks & Deadlines</h2>
@@ -1045,7 +1043,6 @@ export default function LearningContent() {
                   </ul>
                 </div>
 
-                {/* Add Task Form */}
                 <div>
                   <Card className="p-5 sticky top-20">
                     <CardTitle className="text-base font-semibold">Add a task</CardTitle>
@@ -1086,10 +1083,8 @@ export default function LearningContent() {
               </div>
             </TabsContent>
 
-            {/* Study Plans Tab */}
             <TabsContent value="plans" className="mt-6">
               <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-                {/* Generated Plans */}
                 <div className="space-y-4">
                   <h2 className="text-xl font-semibold text-foreground">Saved Study Plans</h2>
                   <ul className="space-y-3">
@@ -1173,7 +1168,6 @@ export default function LearningContent() {
                   </ul>
                 </div>
 
-                {/* Generate Plan Form */}
                 <div>
                   <Card className="p-5">
                     <CardTitle className="text-base font-semibold">Generate a study plan</CardTitle>
@@ -1420,10 +1414,8 @@ export default function LearningContent() {
               </div>
             </TabsContent>
 
-            {/* Quizzes Tab */}
             <TabsContent value="quizzes" className="mt-6">
               <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-                {/* Active Quiz Area & Saved Quizzes */}
                 <div className="space-y-6">
                   {activeQuiz ? (
                     <Card className="p-6">
@@ -1534,7 +1526,6 @@ export default function LearningContent() {
                     </Card>
                   ) : null}
 
-                  {/* Saved Quizzes */}
                   <div>
                     <h3 className="text-lg font-semibold text-foreground mb-4">Saved assessments</h3>
                     <ul className="space-y-3">
@@ -1573,7 +1564,6 @@ export default function LearningContent() {
                   </div>
                 </div>
 
-                {/* Generator Form */}
                 <div>
                   <Card className="p-5 sticky top-20">
                     <CardTitle className="text-base font-semibold">Generate a quiz</CardTitle>

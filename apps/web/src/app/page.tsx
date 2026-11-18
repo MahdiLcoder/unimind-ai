@@ -107,11 +107,9 @@ export default function Home() {
       <SiteHeader />
 
       <main className="flex-1">
-        {/* Hero — deliberate, restrained */}
         <section className="relative border-b border-border/50 py-20 sm:py-28">
           <div className="relative mx-auto max-w-5xl px-6 sm:px-10">
             <div className="flex flex-col items-center text-center max-w-3xl mx-auto">
-              {/* Institution badge */}
               <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/60 px-3.5 py-1 text-xs font-medium text-muted-foreground">
                 <Eye className="size-3.5 text-primary" />
                 ISI Kef · AI-Vision Club
@@ -144,7 +142,6 @@ export default function Home() {
                 </Link>
               </div>
 
-              {/* Trust indicators — inline, not cards */}
               <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
                 {[
                   "FERPA-conscious sandboxing",
@@ -161,7 +158,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Feature grid — tighter, no hover gradients */}
         <section className="py-20 sm:py-24">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="mb-10">
@@ -210,7 +206,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Live Coding Sandbox & Terminal Section */}
         <section className="border-t border-border/50 bg-muted/20 py-20 sm:py-24">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
@@ -299,7 +294,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* How it works — workflow-oriented, not marketing */}
         <section className="border-t border-border/50 py-20 sm:py-24">
           <div className="mx-auto max-w-5xl px-6 sm:px-10">
             <div className="mb-10">
@@ -354,7 +348,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* FAQ — simple and scannable */}
         <section className="py-20 sm:py-24 border-t border-border/50 bg-muted/20">
           <div className="mx-auto max-w-3xl px-6 sm:px-10">
             <div className="mb-10 flex items-center gap-2">
@@ -375,7 +368,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA — simple, no gradient blob */}
         <section className="border-t border-border/50 py-16 sm:py-20">
           <div className="mx-auto max-w-5xl px-6 sm:px-10 text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -410,7 +402,6 @@ export default function Home() {
         </section>
       </main>
 
-      {/* Footer — 3-column, clean */}
       <footer className="border-t border-border/50 py-12">
         <div className="mx-auto max-w-5xl px-6 sm:px-10">
           <div className="grid gap-8 sm:grid-cols-3">

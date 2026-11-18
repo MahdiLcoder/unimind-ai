@@ -267,7 +267,7 @@ async def test_postgres_search_compiles_hybrid_queries_and_normalizes_scores() -
 
     session = _Session()
     results = await PostgresRAGRepository().search(
-        session,  # type: ignore[arg-type]
+        session,
         query_text="library opening hours",
         query_embedding=[1.0] + [0.0] * 1023,
         user_id="user-a",

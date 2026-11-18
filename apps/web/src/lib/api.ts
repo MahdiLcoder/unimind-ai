@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export type ApiRequestOptions = RequestInit & {
   accessToken?: string;
-  /** Abort the request if the server takes too long to respond. */
   timeoutMs?: number;
 };
 

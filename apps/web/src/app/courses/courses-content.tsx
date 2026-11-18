@@ -510,7 +510,6 @@ export default function CoursesContent() {
               {canManageCourses && <TabsTrigger value="manage">Manage Workspaces & Courses</TabsTrigger>}
             </TabsList>
 
-            {/* Courses Tab */}
             <TabsContent value="courses" className="mt-6">
               <section>
                 <div className="flex items-center justify-between mb-4">
@@ -900,7 +899,6 @@ export default function CoursesContent() {
               </TabsContent>
             )}
 
-            {/* Catalog Search Tab */}
             {role === "student" && (
               <TabsContent value="catalog" className="mt-6">
                 <Card className="p-6">
@@ -955,7 +953,6 @@ export default function CoursesContent() {
               </TabsContent>
             )}
 
-            {/* Professor / Admin Management Tab */}
             {canManageCourses && (
               <TabsContent value="manage" className="mt-6">
                 <div className="grid gap-6 md:grid-cols-2">

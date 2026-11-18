@@ -391,7 +391,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Workspaces Navigation */}
         <section aria-labelledby="workspaces-heading" className="mt-8">
           <div className="flex items-center justify-between mb-3">
             <h2 id="workspaces-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -428,7 +427,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* University Overview Metrics */}
         {isLoading && !summary && (
           <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -481,7 +479,6 @@ export default function DashboardPage() {
               ))}
             </dl>
 
-            {/* Structured Tabbed Section */}
             <Tabs defaultValue="all" className="mt-8">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <TabsList className="h-8">
@@ -506,10 +503,8 @@ export default function DashboardPage() {
                 </TabsList>
               </div>
 
-              {/* Combined View */}
               <TabsContent value="all" className="mt-6 space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2">
-                  {/* Upcoming Deadlines */}
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
@@ -568,7 +563,6 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
 
-                  {/* Notifications */}
                   <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
@@ -639,7 +633,6 @@ export default function DashboardPage() {
                   </Card>
                 </div>
 
-                {/* Recent Agent Executions */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -683,7 +676,6 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* Deadlines Only Tab */}
               <TabsContent value="deadlines" className="mt-6">
                 <Card>
                   <CardHeader>
@@ -715,7 +707,6 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* Notifications Only Tab */}
               <TabsContent value="notifications" className="mt-6">
                 <Card>
                   <CardHeader>
@@ -744,7 +735,6 @@ export default function DashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* Agent Runs Only Tab */}
               <TabsContent value="agents" className="mt-6">
                 <Card>
                   <CardHeader>

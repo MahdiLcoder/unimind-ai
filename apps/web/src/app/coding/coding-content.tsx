@@ -266,7 +266,6 @@ export default function CodingContent() {
           </Button>
         </PageHeader>
 
-        {/* Security Sandbox Alert */}
         <div className="mt-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-foreground" role="note">
           <ShieldAlert className="size-4 text-amber-600 shrink-0 mt-0.5" />
           <p>
@@ -280,7 +279,6 @@ export default function CodingContent() {
           </div>
         )}
 
-        {/* Coding Assistant Workspace */}
         <Card className="mt-6 p-6">
           <form className="grid gap-5 sm:grid-cols-2" onSubmit={submit}>
             <div>
@@ -402,7 +400,6 @@ export default function CodingContent() {
           </form>
         </Card>
 
-        {/* Execution Output Panel */}
         {execution && (
           <Card className="mt-6" aria-live="polite">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -456,7 +453,6 @@ export default function CodingContent() {
           </Card>
         )}
 
-        {/* Coding Agent Response Card */}
         {answer && (
           <Card className="mt-6" aria-live="polite">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">

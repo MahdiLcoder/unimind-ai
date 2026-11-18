@@ -552,7 +552,6 @@ export default function WorkspaceContent() {
               </Card>
             </aside>
           )}
-          {/* Chat Assistant Section */}
           <Card className="flex min-h-[38rem] flex-col">
             <CardHeader className="border-b px-5 py-4">
               <div className="flex items-center justify-between">
@@ -770,9 +769,7 @@ export default function WorkspaceContent() {
             </form>
           </Card>
 
-          {/* Right Sidebar: Documents & Search */}
           <aside className="space-y-6">
-            {/* Document Library */}
             <Card id="documents" className="p-5">
               <CardTitle className="text-base font-semibold">Your document library</CardTitle>
               <CardDescription className="mt-1 text-xs text-muted-foreground">
@@ -854,7 +851,6 @@ export default function WorkspaceContent() {
               </div>
             </Card>
 
-            {/* Semantic Search in Sources */}
             <Card className="p-5 shadow-xs">
               <CardTitle className="text-base font-semibold">Search your sources</CardTitle>
               <form className="mt-3 space-y-2" onSubmit={(event) => void searchLibrary(event)}>

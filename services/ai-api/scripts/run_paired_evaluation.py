@@ -156,9 +156,6 @@ async def _add_ragas_scores(
     scored: list[PairedResult] = []
     for result in results:
         question = question_by_id[result.question_id]
-        # Ragas metrics need output contexts, so this is performed in this
-        # command's adjacent output file rather than hiding calls in the core
-        # deterministic paired runner.
         values: dict[str, object] = {}
         for name, output in (("baseline", result.baseline), ("proposed", result.proposed)):
             if output.failure:

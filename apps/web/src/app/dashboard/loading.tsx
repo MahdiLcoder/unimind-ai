@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 export default function DashboardLoading() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header skeleton */}
       <div className="border-b bg-background">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
@@ -16,7 +15,6 @@ export default function DashboardLoading() {
       </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 sm:px-10">
-        {/* Page title */}
         <div className="flex items-center justify-between border-b pb-6">
           <div className="space-y-2">
             <Skeleton className="h-4 w-24" />
@@ -25,7 +23,6 @@ export default function DashboardLoading() {
           <Skeleton className="size-9 rounded-full" />
         </div>
 
-        {/* Profile Card Skeleton */}
         <Card className="mt-8">
           <CardHeader className="pb-3">
             <Skeleton className="h-4 w-24" />
@@ -34,7 +31,6 @@ export default function DashboardLoading() {
           </CardHeader>
         </Card>
 
-        {/* 5 Stats Cards Skeleton */}
         <div className="mt-8 space-y-4">
           <Skeleton className="h-6 w-52" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -47,7 +43,6 @@ export default function DashboardLoading() {
           </div>
         </div>
 
-        {/* Two-column tasks and notifications */}
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -78,7 +73,6 @@ export default function DashboardLoading() {
           </Card>
         </div>
 
-        {/* Hub cards */}
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="p-6">

@@ -56,14 +56,12 @@ function SiteHeaderContent() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Brand */}
         <div className="flex items-center gap-6">
           <Link
             href="/"
             className="group flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="flex size-8 items-center justify-center group-hover:bg-primary/90">
-              {/* <Eye className="size-5" /> */}
               <Image src='/logo.jpg' alt="logo" width={28} height={28}/>
             </div>
             <div className="flex flex-col">
@@ -87,7 +85,6 @@ function SiteHeaderContent() {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
           <nav aria-label="Primary" className="hidden lg:flex lg:items-center lg:gap-0.5">
             {navItems.map((item) => {
               const currentPath = pathname ?? "";
@@ -119,7 +116,6 @@ function SiteHeaderContent() {
           </nav>
         </div>
 
-        {/* Right side controls */}
         <div className="flex items-center gap-3">
           <button
             aria-label="Toggle color theme"
@@ -160,7 +156,6 @@ function SiteHeaderContent() {
             </div>
           )}
 
-          {/* Mobile Menu Trigger via Sheet */}
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger
               className={buttonVariants({

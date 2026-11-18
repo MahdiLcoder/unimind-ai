@@ -8,7 +8,6 @@ export const ALLOWED_UPLOAD_EXTENSIONS = [
   ".md",
 ] as const;
 
-/** Validate a document before it is sent to the ingestion API. */
 export function validateUploadFile(file: File): string | null {
   const name = file.name.toLowerCase();
   if (!ALLOWED_UPLOAD_EXTENSIONS.some((extension) => name.endsWith(extension))) {

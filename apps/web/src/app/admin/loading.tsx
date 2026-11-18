@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 export default function AdminLoading() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header skeleton */}
       <div className="border-b bg-background">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">

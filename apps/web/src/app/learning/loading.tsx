@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 export default function LearningLoading() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header skeleton */}
       <div className="border-b bg-background">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
@@ -23,7 +22,6 @@ export default function LearningLoading() {
         </div>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-2">
-          {/* Planner Column */}
           <div className="space-y-6">
             <Card className="p-5">
               <Skeleton className="h-5 w-40" />
@@ -49,7 +47,6 @@ export default function LearningLoading() {
             </div>
           </div>
 
-          {/* Quiz Column */}
           <div className="space-y-6">
             <Card className="p-5">
               <Skeleton className="h-5 w-40" />
